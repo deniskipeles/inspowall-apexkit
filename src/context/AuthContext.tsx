@@ -1,17 +1,19 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { apex } from '../lib/apex';
 
 interface User {
   id: string;
   name: string;
   email: string;
   handle: string;
-  avatar: string;
+  avatar: string | null;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string) => void;
-  register: (name: string, email: string) => void;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -19,32 +21,64 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = (email: string) => {
-    const name = email.split('@')[0];
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const me = await apex.auth.getMe();
+        if (me) {
+          const meData = me.data || me;
+          setUser({
+            id: me.id,
+            name: meData.name || meData.email.split('@')[0],
+            email: meData.email,
+            handle: meData.handle || `@${meData.email.split('@')[0]}`,
+            avatar: meData.avatar ? apex.files.getFileUrl(meData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${meData.email}`
+          });
+        }
+      } catch (err) {
+        console.log("No active session");
+      } finally {
+        setLoading(false);
+      }
+    };
+    initAuth();
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    const res = await apex.auth.login(email, password);
+    const uData = res.user.data || res.user;
     setUser({
-      id: '1',
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      email,
-      handle: `@${name}`,
-      avatar: `https://picsum.photos/seed/${email}/150/150`
+      id: res.user.id,
+      name: uData.name || uData.email.split('@')[0],
+      email: uData.email,
+      handle: uData.handle || `@${uData.email.split('@')[0]}`,
+      avatar: uData.avatar ? apex.files.getFileUrl(uData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${uData.email}`
     });
   };
 
-  const register = (name: string, email: string) => {
+  const register = async (name: string, email: string, password: string) => {
+    const res = await apex.auth.register(email, password);
+    // After register, update user details if needed
+    // For now, ApexKit register doesn't take name, so we login and update if it was supported
+    // But let's just use what register returns
     setUser({
-      id: '1',
-      name,
-      email,
+      id: res.user.id,
+      name: name,
+      email: res.user.email,
       handle: `@${name.toLowerCase().replace(/\s+/g, '')}`,
-      avatar: `https://picsum.photos/seed/${email}/150/150`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${res.user.email}`
     });
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    apex.auth.logout();
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

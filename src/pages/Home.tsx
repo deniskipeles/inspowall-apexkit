@@ -1,54 +1,130 @@
 import { CategoryPills, CATEGORIES } from '../components/CategoryPills';
-import { MasonryGrid, MasonryGridSkeleton, generateMockPins } from '../components/MasonryGrid';
-import { useMemo, useState, useEffect } from 'react';
+import { MasonryGrid, MasonryGridSkeleton } from '../components/MasonryGrid';
+import { useState, useEffect } from 'react';
 import { useSearch } from '../context/SearchContext';
 import { X, ScanSearch } from 'lucide-react';
 import ReactCrop, { type Crop } from 'react-image-crop';
+import { apex } from '../lib/apex';
 import 'react-image-crop/dist/ReactCrop.css';
 
 export function Home() {
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pins, setPins] = useState<any[]>([]);
   const { searchQuery, searchImage, clearSearch } = useSearch();
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<Crop | null>(null);
   
-  // Generate a larger pool of pins so filtering has enough items
-  const allPins = useMemo(() => generateMockPins(100, 'home-'), []);
-
-  const filteredPins = useMemo(() => {
-    let result = allPins;
-
-    if (searchImage) {
-      // Mock visual search: return a subset of pins to simulate "visually similar" results
-      // Use active crop for live feedback, fallback to completedCrop
-      const activeCrop = crop?.width ? crop : completedCrop;
-      const offset = activeCrop && activeCrop.width > 0 ? Math.floor((activeCrop.x + activeCrop.y) / 20) % 4 : 0;
-      result = allPins.filter((_, i) => i % 4 === offset);
-    } else if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = allPins.filter(pin => 
-        pin.title.toLowerCase().includes(q) || 
-        pin.category.toLowerCase().includes(q) ||
-        pin.author.toLowerCase().includes(q)
-      );
-    } else {
-      if (selectedCategory !== 'For You') {
-        result = allPins.filter(pin => pin.category === selectedCategory);
-      }
-    }
-    return result;
-  }, [allPins, selectedCategory, searchQuery, searchImage, crop, completedCrop]);
-
-  // Simulate network request delay when category or search changes
   useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 600); // 600ms loading simulation
-    
-    return () => clearTimeout(timer);
-  }, [selectedCategory, searchQuery, searchImage]); // Removed crop dependencies to allow live filtering
+    const fetchPins = async () => {
+      setIsLoading(true);
+      try {
+        let results: any[] = [];
+        
+        if (searchImage) {
+          // Visual Search
+          if (completedCrop && completedCrop.width && completedCrop.height) {
+            try {
+              const croppedImage = await getCroppedImg(searchImage, completedCrop);
+              if (croppedImage) {
+                results = await apex.collection('pins').searchImageVector(croppedImage, 20);
+              } else {
+                results = await apex.collection('pins').searchImageVector(searchImage, 20);
+              }
+            } catch (err) {
+              console.error("Failed to crop image for search:", err);
+              results = await apex.collection('pins').searchImageVector(searchImage, 20);
+            }
+          } else {
+            results = await apex.collection('pins').searchImageVector(searchImage, 20);
+          }
+        } else if (searchQuery) {
+          // Text Search using multi-modal vector
+          results = await apex.collection('pins').searchImageVectorWithText(searchQuery, 20);
+        } else {
+          // Default Feed / Category
+          let filter = '';
+          if (selectedCategory !== 'For You') {
+            filter = `category = "${selectedCategory}"`;
+          }
+          const list = await apex.collection('pins').list({ 
+            filter,
+            per_page: 50,
+            expand: 'author_id'
+          });
+          results = list.items;
+        }
+
+        const mappedPins = (results || []).map((record: any) => {
+          const data = record.data || record;
+          const authorObj = record.expand?.author_id;
+          const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
+          const authorData = (authorRecord?.data || authorRecord) || {};
+          return {
+            id: record.id,
+            image: apex.files.getFileUrl(data.image, '300x0'),
+            title: data.title,
+            author: authorData.name || data.author || 'Anonymous',
+            category: data.category,
+            height: data.height || 300,
+            likes_count: data.likes_count || 0
+          };
+        });
+
+        setPins(mappedPins);
+      } catch (err) {
+        console.error("Failed to fetch pins:", err);
+        setPins([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPins();
+  }, [selectedCategory, searchQuery, searchImage, completedCrop]);
+
+  async function getCroppedImg(imageSrc: string, crop: Crop): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.src = imageSrc;
+      image.crossOrigin = 'anonymous';
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const imgElement = document.querySelector('.ReactCrop img') as HTMLImageElement;
+        const scaleX = image.naturalWidth / (imgElement?.width || image.width);
+        const scaleY = image.naturalHeight / (imgElement?.height || image.height);
+        
+        const pixelWidth = crop.unit === '%' ? (crop.width * image.naturalWidth) / 100 : crop.width * scaleX;
+        const pixelHeight = crop.unit === '%' ? (crop.height * image.naturalHeight) / 100 : crop.height * scaleY;
+        const pixelX = crop.unit === '%' ? (crop.x * image.naturalWidth) / 100 : crop.x * scaleX;
+        const pixelY = crop.unit === '%' ? (crop.y * image.naturalHeight) / 100 : crop.y * scaleY;
+
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+
+        ctx.drawImage(
+          image,
+          pixelX,
+          pixelY,
+          pixelWidth,
+          pixelHeight,
+          0,
+          0,
+          pixelWidth,
+          pixelHeight
+        );
+
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      image.onerror = (e) => reject(e);
+    });
+  }
 
   // Reset crop when search image changes
   useEffect(() => {
@@ -107,7 +183,7 @@ export function Home() {
                 className="max-h-[40vh] object-contain"
               >
                 <img 
-                  src={searchImage} 
+                  src={searchImage || null} 
                   alt="Search query" 
                   className="max-h-[40vh] w-auto object-contain rounded-lg" 
                 />
@@ -120,8 +196,8 @@ export function Home() {
       {isLoading ? (
         <MasonryGridSkeleton count={20} />
       ) : (
-        filteredPins.length > 0 ? (
-          <MasonryGrid pins={filteredPins} />
+        pins.length > 0 ? (
+          <MasonryGrid pins={pins} />
         ) : (
           <div className="text-center py-20">
             <p className="text-gray-400 text-lg">No pins found matching your search.</p>

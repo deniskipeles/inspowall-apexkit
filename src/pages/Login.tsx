@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet-async';
@@ -6,14 +6,20 @@ import { Helmet } from 'react-helmet-async';
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email) {
-      login(email);
-      navigate('/');
+    setError('');
+    if (email && password) {
+      try {
+        await login(email, password);
+        navigate('/');
+      } catch (err: any) {
+        setError(err.message || 'Login failed. Please check your credentials.');
+      }
     }
   };
 
@@ -30,6 +36,11 @@ export function Login() {
         </div>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-xl text-sm">
+              {error}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
             <input 

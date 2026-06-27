@@ -6,6 +6,7 @@ import { PinDetail } from './pages/PinDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Profile } from './pages/Profile';
+import { CreatePin } from './pages/CreatePin';
 import { SearchProvider } from './context/SearchContext';
 import { AuthProvider } from './context/AuthContext';
 
@@ -24,6 +25,7 @@ export default function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/create" element={<CreatePin />} />
                 </Routes>
               </main>
             </div>

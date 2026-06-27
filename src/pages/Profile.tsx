@@ -1,17 +1,77 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../context/AuthContext';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { MasonryGrid, generateMockPins } from '../components/MasonryGrid';
+import { MasonryGrid, MasonryGridSkeleton } from '../components/MasonryGrid';
 import { LogOut } from 'lucide-react';
+import { apex } from '../lib/apex';
 
 export function Profile() {
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'created' | 'saved'>('saved');
+  const [pins, setPins] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const savedPins = useMemo(() => generateMockPins(24, 'saved-'), []);
-  const createdPins = useMemo(() => generateMockPins(8, 'created-'), []);
+  useEffect(() => {
+    const fetchProfilePins = async () => {
+      if (!user) return;
+      setIsLoading(true);
+      try {
+        let results: any[] = [];
+        if (activeTab === 'created') {
+          const list = await apex.collection('pins').list({
+            filter: `author_id = "${user.id}"`,
+            expand: 'author_id'
+          });
+          results = list.items;
+        } else {
+          const list = await apex.collection('saved_pins').list({
+            filter: `user_id = "${user.id}"`,
+            expand: 'pin_id,pin_id.author_id'
+          });
+          results = list.items.map((item: any) => {
+            const pin = item.expand?.pin_id;
+            return Array.isArray(pin) ? pin[0] : pin;
+          });
+        }
+
+        const mapped = (results || []).filter(Boolean).map((p: any) => {
+          const pData = p.data || p;
+          const authorObj = p.expand?.author_id;
+          const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
+          const authorData = (authorRecord?.data || authorRecord) || {};
+          
+          return {
+            id: p.id,
+            image: apex.files.getFileUrl(pData.image, '300x0'),
+            title: pData.title,
+            author: authorData.name || pData.author || 'Anonymous',
+            category: pData.category,
+            height: pData.height || 300,
+            initiallySaved: activeTab === 'saved',
+            likes_count: pData.likes_count || 0
+          };
+        });
+        setPins(mapped);
+      } catch (err) {
+        console.error("Failed to fetch profile pins:", err);
+        setPins([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfilePins();
+  }, [user, activeTab]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-12 h-12 border-4 border-neon border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -29,7 +89,7 @@ export function Profile() {
       {/* Profile Header */}
       <div className="flex flex-col items-center text-center mb-12">
         <img 
-          src={user.avatar} 
+          src={user.avatar || null} 
           alt={user.name} 
           className="w-32 h-32 rounded-full object-cover border-4 border-surface shadow-2xl mb-4"
           referrerPolicy="no-referrer"
@@ -88,7 +148,15 @@ export function Profile() {
       </div>
 
       {/* Grid */}
-      <MasonryGrid pins={activeTab === 'created' ? createdPins : savedPins} />
+      {isLoading ? (
+        <MasonryGridSkeleton count={12} />
+      ) : pins.length > 0 ? (
+        <MasonryGrid pins={pins} />
+      ) : (
+        <div className="text-center py-20 text-gray-500">
+          No pins to show yet.
+        </div>
+      )}
     </div>
   );
 }

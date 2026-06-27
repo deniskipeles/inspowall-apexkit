@@ -1,26 +1,10 @@
 import { PinCard } from './PinCard';
 
-export const generateMockPins = (count: number, seedPrefix: string = '') => {
-  return Array.from({ length: count }).map((_, i) => {
-    const height = Math.floor(Math.random() * (400 - 200 + 1) + 200);
-    const categories = ['Architecture', 'Cyberpunk', 'Nature', 'Minimal', 'Abstract', 'Portrait', 'Fashion', 'Tech', 'Space'];
-    const category = categories[Math.floor(Math.random() * categories.length)];
-    return {
-      id: `${seedPrefix}${i}`,
-      image: `https://picsum.photos/seed/${category.toLowerCase()}${seedPrefix}${i}/400/${height}`,
-      title: `${category} Inspiration`,
-      author: `Creator ${i}`,
-      category: category,
-      height
-    };
-  });
-};
-
 export function MasonryGrid({ pins }: { pins: any[] }) {
   return (
     <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-4 mx-auto">
-      {pins.map((pin) => (
-        <PinCard key={pin.id} {...pin} />
+      {pins.map((pin, index) => (
+        <PinCard key={index} {...pin} />
       ))}
     </div>
   );
