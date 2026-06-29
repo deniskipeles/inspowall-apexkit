@@ -23,22 +23,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Initialize and validate persistent token on app load / refresh
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const me = await apex.auth.getMe();
-        if (me) {
-          const meData = me.data || me;
-          setUser({
-            id: me.id,
-            name: meData.name || meData.email.split('@')[0],
-            email: meData.email,
-            handle: meData.handle || `@${meData.email.split('@')[0]}`,
-            avatar: meData.avatar ? apex.files.getFileUrl(meData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${meData.email}`
-          });
+        const savedToken = localStorage.getItem('apex_token');
+        if (savedToken) {
+          // Manually load the persistent token into the ApexKit client instance
+          apex.setToken(savedToken);
+          
+          const me = await apex.auth.getMe();
+          if (me) {
+            const meData = me.data || me;
+            setUser({
+              id: me.id,
+              name: meData.name || meData.email.split('@')[0],
+              email: meData.email,
+              handle: meData.handle || `@${meData.email.split('@')[0]}`,
+              avatar: meData.avatar ? apex.files.getFileUrl(meData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${meData.email}`
+            });
+          }
         }
       } catch (err) {
-        console.log("No active session");
+        console.log("Persistent session is invalid or expired.");
+        // Clean up invalid session parameters
+        localStorage.removeItem('apex_token');
+        apex.setToken('');
       } finally {
         setLoading(false);
       }
@@ -49,6 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await apex.auth.login(email, password);
     const uData = res.user.data || res.user;
+    
+    // Persist token locally
+    localStorage.setItem('apex_token', res.token);
+
     setUser({
       id: res.user.id,
       name: uData.name || uData.email.split('@')[0],
@@ -60,19 +74,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (name: string, email: string, password: string) => {
     const res = await apex.auth.register(email, password);
-    // After register, update user details if needed
-    // For now, ApexKit register doesn't take name, so we login and update if it was supported
-    // But let's just use what register returns
+    
+    // Persist token locally
+    localStorage.setItem('apex_token', res.token);
+
     setUser({
       id: res.user.id,
       name: name,
       email: res.user.email,
       handle: `@${name.toLowerCase().replace(/\s+/g, '')}`,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${res.user.email}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed={res.user.email}`
     });
   };
 
   const logout = () => {
+    // Clear persistent token store
+    localStorage.removeItem('apex_token');
     apex.auth.logout();
     setUser(null);
   };

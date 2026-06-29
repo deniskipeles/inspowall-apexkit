@@ -5,34 +5,23 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apex } from '../lib/apex';
 
-export function PinCard({ id, image, title, author, height, initiallySaved = false, likes_count = 0 }: any) {
+export function PinCard({ id, image, title, author, height, initiallySaved = false, initiallyLiked = false, likes_count = 0 }: any) {
   const [isHovered, setIsHovered] = useState(false);
   const [isSaved, setIsSaved] = useState(initiallySaved);
   const [isSaving, setIsSaving] = useState(false);
   const [saveId, setSaveId] = useState<string | null>(null);
-  const [isLiked, setIsLiked] = useState(false);
+  const [isLiked, setIsLiked] = useState(initiallyLiked);
   const [likesCount, setLikesCount] = useState(likes_count);
   const [isLiking, setIsLiking] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Sync state if props change (e.g. from tab-swapping or background updates)
   useEffect(() => {
+    setIsSaved(initiallySaved);
+    setIsLiked(initiallyLiked);
     setLikesCount(likes_count);
-    
-    const checkLiked = async () => {
-      if (user) {
-        try {
-          const list = await apex.collection('likes').list({
-            filter: `user_id = "${user.id}" && pin_id = "${id}"`
-          });
-          setIsLiked(list.total > 0);
-        } catch (err) {
-          // Silently fail if 'likes' collection isn't created yet
-        }
-      }
-    };
-    checkLiked();
-  }, [user, id, likes_count]);
+  }, [initiallySaved, initiallyLiked, likes_count]);
 
   const handleToggleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -45,9 +34,10 @@ export function PinCard({ id, image, title, author, height, initiallySaved = fal
 
     setIsLiking(true);
     try {
-      const { liked } = await apex.collection('pins').toggleLike(user.id, id);
-      setIsLiked(liked);
-      setLikesCount(prev => liked ? prev + 1 : Math.max(0, prev - 1));
+      // Execute the server-side toggleLike script
+      const res = await apex.scripts.run('toggle-like', { pinId: id });
+      setIsLiked(res.liked);
+      setLikesCount(res.likesCount);
     } catch (err) {
       console.error("Failed to toggle like:", err);
     } finally {
@@ -67,7 +57,6 @@ export function PinCard({ id, image, title, author, height, initiallySaved = fal
     setIsSaving(true);
     try {
       if (isSaved) {
-        // If we don't have saveId, we might need to find it first if it was initiallySaved
         let idToDelete = saveId;
         if (!idToDelete) {
           const list = await apex.collection('saved_pins').list({
@@ -107,7 +96,7 @@ export function PinCard({ id, image, title, author, height, initiallySaved = fal
     >
       <div 
         onClick={() => navigate(`/pin/${id}`)} 
-        className="block relative rounded-2xl overflow-hidden bg-surface"
+        className="block relative rounded-2xl overflow-hidden bg-surface shadow-md"
       >
         <img 
           src={image || null} 
@@ -116,17 +105,31 @@ export function PinCard({ id, image, title, author, height, initiallySaved = fal
           style={{ height: `${height}px` }}
           referrerPolicy="no-referrer"
         />
+
+        {/* ALWAYS-ON CORNER BADGES FOR TOUCH / MOBILE LAYOUTS */}
+        <div className="absolute top-3 left-3 flex gap-1.5 z-20 pointer-events-none">
+          {isSaved && (
+            <div className="bg-neon text-ink p-1.5 rounded-full shadow-lg border border-black/5 animate-fade-in">
+              <Check size={12} className="stroke-[3]" />
+            </div>
+          )}
+          {isLiked && (
+            <div className="bg-red-500 text-white p-1.5 rounded-full shadow-lg border border-white/5 animate-fade-in">
+              <Heart size={12} fill="currentColor" />
+            </div>
+          )}
+        </div>
         
-        {/* Overlay */}
-        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-between p-4 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
+        {/* Hover Overlay */}
+        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-between p-4 z-10 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
           <div className="flex justify-end">
             <button 
               onClick={handleToggleSave}
               disabled={isSaving}
               className={`font-bold py-2 px-5 rounded-full transition-all transform hover:scale-105 active:scale-95 flex items-center gap-1 ${
                 isSaved 
-                ? 'bg-black/60 text-white hover:bg-black/80' 
-                : 'bg-neon text-ink hover:bg-white'
+                ? 'bg-neon text-ink hover:opacity-90' 
+                : 'bg-black/60 text-white hover:bg-black/80'
               }`}
             >
               {isSaving ? (

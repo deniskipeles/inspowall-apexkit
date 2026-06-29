@@ -39,12 +39,12 @@ export function PinDetail() {
         const data = record.data || record;
         const authorObj = record.expand?.author_id;
         const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
-        const authorData = (authorRecord?.data || authorRecord) || {};
+        const authorData = (authorRecord?.metadata || authorRecord) || {};
         const pData = {
           id: record.id,
           title: data.title,
           description: data.description,
-          author: authorData.name || 'Anonymous',
+          author: authorData.name || data.author || record?.expand?.author_id?.name || record?.expand?.author_id?.nickname || 'Anonymous',
           authorHandle: authorData.handle || '@anonymous',
           authorAvatar: authorData.avatar ? apex.files.getFileUrl(authorData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${record.id}`,
           image: apex.files.getFileUrl(data.image),
@@ -54,14 +54,28 @@ export function PinDetail() {
         setPin(pData);
         setLikesCount(pData.likes_count);
 
-        // Check if saved & liked
+        // Check if saved & liked using nested $and filters
         if (user) {
           const [savedList, likedList] = await Promise.all([
             apex.collection('saved_pins').list({
-              filter: `user_id = "${user.id}" && pin_id = "${id}"`
+              filter: {
+                $and: [
+                  {
+                    user_id: user.id,
+                    pin_id: Number(id)
+                  }
+                ]
+              }
             }).catch(() => ({ total: 0, items: [] })),
             apex.collection('likes').list({
-              filter: `user_id = "${user.id}" && pin_id = "${id}"`
+              filter: {
+                $and: [
+                  {
+                    user_id: user.id,
+                    pin_id: Number(id)
+                  }
+                ]
+              }
             }).catch(() => ({ total: 0, items: [] }))
           ]);
           
@@ -91,7 +105,7 @@ export function PinDetail() {
     setCrop(undefined);
     setCompletedCrop(null);
     fetchPin();
-  }, [id]);
+  }, [id, user]);
 
   // Fetch similar pins
   useEffect(() => {
@@ -105,20 +119,34 @@ export function PinDetail() {
           try {
             const croppedImage = await getCroppedImg(pin.image, completedCrop);
             if (croppedImage) {
-              results = await apex.collection('pins').searchImageVector(croppedImage, 15);
+              results = await apex.collection('pins').searchImageVectorWithImage(croppedImage, 15);
             } else {
-              results = await apex.collection('pins').searchImageVector(pin.image, 15);
+              results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
             }
           } catch (err) {
             console.error("Failed to crop image for search:", err);
-            results = await apex.collection('pins').searchImageVector(pin.image, 15);
+            results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
           }
         } else if (isLensMode) {
           // Visual search for whole image
-          results = await apex.collection('pins').searchImageVector(pin.image, 15);
+          results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
         } else {
-          // Text search based on title for "More like this"
-          results = await apex.collection('pins').searchTextVector(pin.title, 15);
+          // Retrieve the current image vector and perform an image-image search against the 'image' field
+          try {
+            const vectors = await apex.collection('pins').getVector(pin.id);
+            const imageVector = vectors.find(v => v.field_name === 'image')?.vector;
+            if (imageVector) {
+              const res = await apex.collection('pins').searchVectorWithVector('image', imageVector, { limit: 15 });
+              results = res.items || res;
+            } else {
+              const res = await apex.collection('pins').searchVectorWithText(pin.title, { limit: 15 });
+              results = res.items || res;
+            }
+          } catch (err) {
+            console.error("Vector search failed, falling back to title search", err);
+            const res = await apex.collection('pins').searchVectorWithText(pin.title, { limit: 15 });
+            results = res.items || res;
+          }
         }
 
         const mapped = (results || [])
@@ -131,10 +159,64 @@ export function PinDetail() {
               title: rData.title,
               author: rData.author || 'Anonymous',
               category: rData.category,
-              height: rData.height || 300
+              height: rData.height || 300,
+              likes_count: rData.likes_count || 0
             };
           });
-        setSimilarPins(mapped);
+
+        // --- OPTIMIZED SINGLE BATCH FETCH FOR ALL LIKES & SAVES FOR SIMILAR PINS USING $and ---
+        let likedPinIds = new Set<string | number>();
+        let savedPinIds = new Set<string | number>();
+
+        if (user && mapped.length > 0) {
+          const pinIds = mapped.map(p => p.id);
+          try {
+            const [likesRes, savedRes] = await Promise.all([
+              apex.collection('likes').list({
+                filter: {
+                  $and: [
+                    {
+                      user_id: user.id,
+                      pin_id: { $in: pinIds }
+                    }
+                  ]
+                },
+                per_page: 100
+              }),
+              apex.collection('saved_pins').list({
+                filter: {
+                  $and: [
+                    {
+                      user_id: user.id,
+                      pin_id: { $in: pinIds }
+                    }
+                  ]
+                },
+                per_page: 100
+              })
+            ]);
+
+            likesRes.items.forEach((item: any) => {
+              const pId = item.data?.pin_id;
+              if (pId) likedPinIds.add(pId);
+            });
+
+            savedRes.items.forEach((item: any) => {
+              const pId = item.data?.pin_id;
+              if (pId) savedPinIds.add(pId);
+            });
+          } catch (err) {
+            console.error("Failed to batch fetch likes/saves for similar pins:", err);
+          }
+        }
+
+        const finalSimilar = mapped.map(p => ({
+          ...p,
+          initiallyLiked: likedPinIds.has(p.id),
+          initiallySaved: savedPinIds.has(p.id)
+        }));
+
+        setSimilarPins(finalSimilar);
       } catch (err) {
         console.error("Failed to fetch similar:", err);
       } finally {
@@ -143,7 +225,7 @@ export function PinDetail() {
     };
 
     fetchSimilar();
-  }, [pin, isLensMode, completedCrop]);
+  }, [pin, isLensMode, completedCrop, user]);
 
   const handleToggleLike = async () => {
     if (!user) {
@@ -153,9 +235,9 @@ export function PinDetail() {
 
     setIsLiking(true);
     try {
-      const { liked } = await apex.collection('pins').toggleLike(user.id, pin.id);
-      setIsLiked(liked);
-      setLikesCount(prev => liked ? prev + 1 : Math.max(0, prev - 1));
+      const res = await apex.scripts.run('toggle-like', { pinId: pin.id });
+      setIsLiked(res.liked);
+      setLikesCount(res.likesCount);
     } catch (err) {
       console.error("Failed to toggle like:", err);
     } finally {

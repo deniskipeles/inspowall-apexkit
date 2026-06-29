@@ -21,13 +21,13 @@ export function Profile() {
         let results: any[] = [];
         if (activeTab === 'created') {
           const list = await apex.collection('pins').list({
-            filter: `author_id = "${user.id}"`,
+            filter: { author_id: Number(user.id) },
             expand: 'author_id'
           });
           results = list.items;
         } else {
           const list = await apex.collection('saved_pins').list({
-            filter: `user_id = "${user.id}"`,
+            filter: { user_id: Number(user.id) },
             expand: 'pin_id,pin_id.author_id'
           });
           results = list.items.map((item: any) => {
@@ -40,8 +40,8 @@ export function Profile() {
           const pData = p.data || p;
           const authorObj = p.expand?.author_id;
           const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
-          const authorData = (authorRecord?.data || authorRecord) || {};
-          
+          const authorData = (authorRecord?.metadata || authorRecord) || {};
+
           return {
             id: p.id,
             image: apex.files.getFileUrl(pData.image, '300x0'),
@@ -49,11 +49,64 @@ export function Profile() {
             author: authorData.name || pData.author || 'Anonymous',
             category: pData.category,
             height: pData.height || 300,
-            initiallySaved: activeTab === 'saved',
             likes_count: pData.likes_count || 0
           };
         });
-        setPins(mapped);
+
+        // --- OPTIMIZED SINGLE BATCH FETCH FOR ALL LIKES & SAVES USING $and ---
+        let likedPinIds = new Set<string | number>();
+        let savedPinIds = new Set<string | number>();
+
+        if (user && mapped.length > 0) {
+          const pinIds = mapped.map(p => p.id);
+          try {
+            const [likesRes, savedRes] = await Promise.all([
+              apex.collection('likes').list({
+                filter: {
+                  $and: [
+                    {
+                      user_id: user.id,
+                      pin_id: { $in: pinIds }
+                    }
+                  ]
+                },
+                per_page: 100
+              }),
+              apex.collection('saved_pins').list({
+                filter: {
+                  $and: [
+                    {
+                      user_id: user.id,
+                      pin_id: { $in: pinIds }
+                    }
+                  ]
+                },
+                per_page: 100
+              })
+            ]);
+
+            // Safely target the nested data property
+            likesRes.items.forEach((item: any) => {
+              const pId = item.data?.pin_id;
+              if (pId) likedPinIds.add(pId);
+            });
+
+            savedRes.items.forEach((item: any) => {
+              const pId = item.data?.pin_id;
+              if (pId) savedPinIds.add(pId);
+            });
+          } catch (err) {
+            console.error("Failed to batch fetch likes/saves on profile:", err);
+          }
+        }
+
+        const finalPins = mapped.map(p => ({
+          ...p,
+          initiallyLiked: likedPinIds.has(p.id),
+          initiallySaved: savedPinIds.has(p.id)
+        }));
+
+        setPins(finalPins);
       } catch (err) {
         console.error("Failed to fetch profile pins:", err);
         setPins([]);
@@ -85,18 +138,18 @@ export function Profile() {
   return (
     <div className="max-w-7xl mx-auto pt-8">
       <Helmet><title>{user.name} | Vortex</title></Helmet>
-      
+
       {/* Profile Header */}
       <div className="flex flex-col items-center text-center mb-12">
-        <img 
-          src={user.avatar || null} 
-          alt={user.name} 
+        <img
+          src={user.avatar || undefined}
+          alt={user.name}
           className="w-32 h-32 rounded-full object-cover border-4 border-surface shadow-2xl mb-4"
           referrerPolicy="no-referrer"
         />
         <h1 className="text-4xl font-display font-bold mb-1">{user.name}</h1>
         <p className="text-gray-400 mb-4">{user.handle}</p>
-        
+
         <div className="flex gap-6 mb-6">
           <div className="text-center">
             <span className="block font-bold text-xl">1.2k</span>
@@ -115,7 +168,7 @@ export function Profile() {
           <button className="bg-surface hover:bg-black/5 dark:hover:bg-white/10 border border-black/10 dark:border-white/10 px-6 py-2.5 rounded-full font-medium transition-colors text-ink-invert">
             Edit Profile
           </button>
-          <button 
+          <button
             onClick={handleLogout}
             className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 px-6 py-2.5 rounded-full font-medium transition-colors flex items-center gap-2"
           >
@@ -127,7 +180,7 @@ export function Profile() {
 
       {/* Tabs */}
       <div className="flex justify-center gap-8 mb-8 border-b border-black/10 dark:border-white/10">
-        <button 
+        <button
           onClick={() => setActiveTab('created')}
           className={`pb-4 font-medium transition-colors relative ${activeTab === 'created' ? 'text-ink-invert' : 'text-gray-500 hover:text-ink-invert'}`}
         >
@@ -136,7 +189,7 @@ export function Profile() {
             <div className="absolute bottom-0 left-0 w-full h-0.5 bg-neon rounded-t-full" />
           )}
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('saved')}
           className={`pb-4 font-medium transition-colors relative ${activeTab === 'saved' ? 'text-ink-invert' : 'text-gray-500 hover:text-ink-invert'}`}
         >

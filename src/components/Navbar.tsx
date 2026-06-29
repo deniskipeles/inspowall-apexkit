@@ -1,15 +1,18 @@
-import { Search, Bell, MessageCircle, Plus, Camera, X, Clock, TrendingUp, Loader2, Moon, Sun } from 'lucide-react';
+import { Search, Bell, MessageCircle, Plus, Camera, X, Loader2, Moon, Sun } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { apex } from '../lib/apex';
+import { apex, ApexKitRealtimeWSClient } from '../lib/apex';
 
 export function Navbar() {
   const { searchQuery, setSearchQuery, searchImage, setSearchImage } = useSearch();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const wsClientRef = useRef<ApexKitRealtimeWSClient | null>(null);
+  const cursorRef = useRef<{ start: number | null; end: number | null }>({ start: null, end: null });
   const navigate = useNavigate();
   const location = useLocation();
   const [localQuery, setLocalQuery] = useState(searchQuery);
@@ -17,6 +20,7 @@ export function Navbar() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -36,7 +40,19 @@ export function Navbar() {
     }
   }, [searchQuery]);
 
-  // Instant Search / Autocomplete
+  // Establish a single, persistent WebSocket Client connection for fast autocomplete lookups
+  useEffect(() => {
+    const token = apex.getToken();
+    const client = new ApexKitRealtimeWSClient(apex.baseUrl, token);
+    client.connect();
+    wsClientRef.current = client;
+
+    return () => {
+      client.disconnect();
+    };
+  }, [user]);
+
+  // Instant Autocomplete search via WebSocket to avoid HTTP roundtrip overhead
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (!localQuery || localQuery.length < 2) {
@@ -46,28 +62,44 @@ export function Navbar() {
 
       setIsSearchingSuggestions(true);
       try {
-        const results = await apex.collection('pins').searchRecordsWithOSE(localQuery);
-        setSuggestions(results.slice(0, 8)); // Limit to 8 suggestions
+        let results: any[] = [];
+        if (wsClientRef.current && wsClientRef.current.isConnected) {
+          results = await wsClientRef.current.search('pins', localQuery, 8);
+        } else {
+          // Fallback to HTTP API if WebSocket is connecting or unavailable
+          results = await apex.collection('pins').searchRecordsInstantlyWithOSE(localQuery);
+        }
+
+        // Map unified results structure safely
+        const mapped = (results || []).map((r: any) => ({
+          id: r.id,
+          title: r.snippet?.title || r.title || 'Untitled',
+          description: r.snippet?.description || r.description || ''
+        }));
+
+        setSuggestions(mapped);
       } catch (err: any) {
         if (!err.message?.includes('Rate limit')) {
-          console.error("Failed to fetch suggestions:", err);
+          console.error("Failed to fetch autocomplete suggestions:", err);
         }
       } finally {
         setIsSearchingSuggestions(false);
       }
     };
 
-    const debounceTimer = setTimeout(fetchSuggestions, 800);
+    const debounceTimer = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(debounceTimer);
   }, [localQuery]);
 
-  // Debounce context update to prevent Android cursor jumping
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchQuery(localQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [localQuery, setSearchQuery]);
+  // Restore virtual cursor selection range on mobile keyboards
+  useLayoutEffect(() => {
+    if (searchInputRef.current && cursorRef.current.start !== null) {
+      searchInputRef.current.setSelectionRange(
+        cursorRef.current.start,
+        cursorRef.current.end
+      );
+    }
+  }, [localQuery]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,26 +117,29 @@ export function Navbar() {
   };
 
   const handleTextSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    cursorRef.current = {
+      start: e.target.selectionStart,
+      end: e.target.selectionEnd
+    };
     setLocalQuery(e.target.value);
     if (e.target.value && searchImage) setSearchImage(null); // Clear image search when typing
   };
 
+  // Submit search only when user hits 'Enter'
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       setIsSearchFocused(false);
+      setSearchQuery(localQuery); // Triggers Home.tsx to call searchImageVectorWithText
       if (location.pathname !== '/') navigate('/');
     }
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setLocalQuery(suggestion);
-    setSearchQuery(suggestion);
-    if (searchImage) setSearchImage(null);
+  // Navigate directly to exact selected pin detail
+  const handleSuggestionClick = (pinId: number | string) => {
     setIsSearchFocused(false);
-    if (location.pathname !== '/') navigate('/');
+    setLocalQuery('');
+    navigate(`/pin/${pinId}`);
   };
-
-  const { user, loading } = useAuth();
 
   return (
     <nav className="fixed top-0 w-full z-50 bg-ink/80 backdrop-blur-xl border-b border-black/10 dark:border-white/10">
@@ -124,13 +159,14 @@ export function Navbar() {
               <Search size={18} className="text-gray-400 group-focus-within:text-neon transition-colors" />
             </div>
             <input 
+              ref={searchInputRef}
               type="text" 
               value={localQuery}
               onChange={handleTextSearch}
               onFocus={() => setIsSearchFocused(true)}
               onKeyDown={handleKeyDown}
               placeholder="Search for ideas..." 
-              className="w-full bg-surface border border-black/10 dark:border-white/10 rounded-full py-3 pl-12 pr-20 text-sm focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 transition-all placeholder-gray-500 text-gray-900 dark:text-white relative z-10"
+              className="w-full bg-surface border border-black/10 dark:border-white/10 rounded-full py-3 pl-12 pr-20 text-sm focus:outline-none focus:border-neon/50 focus:ring-1 focus:ring-neon/50 transition-all placeholder-gray-500 text-ink-invert relative z-10"
             />
             <div className="absolute inset-y-0 right-0 pr-2 flex items-center gap-1 z-10">
               {localQuery && (
@@ -175,7 +211,7 @@ export function Navbar() {
                       {suggestions.map((pin, index) => (
                         <button
                           key={`${pin.id}-${index}`}
-                          onClick={() => handleSuggestionClick(pin.title)}
+                          onClick={() => handleSuggestionClick(pin.id)}
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition-colors text-left"
                         >
                           <Search size={16} className="text-gray-400" />
@@ -227,7 +263,7 @@ export function Navbar() {
                 <MessageCircle size={22} />
               </button>
               <Link to="/profile" className="w-10 h-10 rounded-full bg-surface border border-black/10 dark:border-white/10 overflow-hidden ml-2 block">
-                <img src={user.avatar || null} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={user.avatar || undefined} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </Link>
             </>
           ) : (
