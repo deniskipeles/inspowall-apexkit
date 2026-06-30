@@ -28,31 +28,31 @@ export function PinImageLens({
   return (
     <div className="w-full md:w-1/2 bg-black flex items-center justify-center relative group min-h-[50vh]">
       {isLensMode ? (
-        <ReactCrop 
-          crop={crop} 
-          onChange={c => setCrop(c)} 
+        <ReactCrop
+          crop={crop}
+          onChange={c => setCrop(c)}
           onComplete={c => setCompletedCrop(c)}
           className="max-h-[85vh] object-contain"
         >
-          <img 
-            src={image || undefined} 
-            alt={title} 
-            className="w-full h-auto max-h-[85vh] object-contain" 
-            referrerPolicy="no-referrer" 
+          <img
+            src={image || undefined}
+            alt={title}
+            className="w-full h-auto max-h-[85vh] object-contain"
+            referrerPolicy="no-referrer"
           />
         </ReactCrop>
       ) : (
-        <img 
-          src={image || undefined} 
-          alt={title} 
-          className="w-full h-auto max-h-[85vh] object-contain" 
-          referrerPolicy="no-referrer" 
+        <img
+          src={image || undefined}
+          alt={title}
+          className="w-full h-auto max-h-[85vh] object-contain"
+          referrerPolicy="no-referrer"
         />
       )}
 
       {/* Lens Toggle Button */}
       <div className="absolute top-4 right-4 flex gap-2 transition-opacity">
-        <button 
+        <button
           onClick={() => {
             setIsLensMode(!isLensMode);
             if (isLensMode) {
@@ -60,21 +60,22 @@ export function PinImageLens({
               setCompletedCrop(null);
             }
           }}
-          className={`backdrop-blur-md p-3 rounded-full transition-colors flex items-center gap-2 ${
-            isLensMode ? 'bg-neon text-ink hover:bg-white' : 'bg-black/50 text-white hover:bg-black/80 opacity-0 group-hover:opacity-100'
-          }`}
+          className={`backdrop-blur-md p-3 rounded-full transition-colors flex items-center gap-2 ${isLensMode
+              ? 'bg-neon text-ink hover:bg-white'
+              : 'bg-black/50 text-white hover:bg-black/80 opacity-100 md:opacity-0 md:group-hover:opacity-100'
+            }`}
           title={isLensMode ? "Exit visual search" : "Search by image section"}
         >
           {isLensMode ? <X size={20} /> : <ScanSearch size={20} />}
           {isLensMode && <span className="font-bold text-sm pr-1">Exit Lens</span>}
         </button>
         {!isLensMode && (
-          <button className="bg-black/50 backdrop-blur-md p-3 rounded-full hover:bg-black/80 transition-colors opacity-0 group-hover:opacity-100 text-white">
+          <button className="bg-black/50 backdrop-blur-md p-3 rounded-full hover:bg-black/80 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 text-white">
             <Download size={20} />
           </button>
         )}
       </div>
-      
+
       {isLensMode && !hasActiveCrop && (
         <div className="absolute bottom-6 left-0 right-0 text-center pointer-events-none">
           <span className="bg-black/70 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-medium">
