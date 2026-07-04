@@ -1,40 +1,16 @@
 import io
 import os
-import re
+import json
 import time
+import re
 import torch
 import requests
 from PIL import Image
-from unittest.mock import patch
 
-# ==========================================
-# 0. FLORENCE-2 COMPATIBILITY MONKEY-PATCHES
-# ==========================================
-import transformers
+# pip install -U transformers accelerate bitsandbytes qwen-vl-utils
 
-# Patch 1: Fix AttributeError for forced_bos_token_id on transformers >= 4.45
-if hasattr(transformers, "configuration_utils"):
-    orig_getattribute = transformers.configuration_utils.PretrainedConfig.__getattribute__
-    def patched_getattribute(self, name):
-        try:
-            return orig_getattribute(self, name)
-        except AttributeError:
-            if name in ("forced_bos_token_id", "forced_eos_token_id"):
-                return None
-            raise
-    transformers.configuration_utils.PretrainedConfig.__getattribute__ = patched_getattribute
-
-# Patch 2: Bypasses unnecessary flash_attn requirement checks
-from transformers.dynamic_module_utils import get_imports
-def fixed_get_imports(filename: str | os.PathLike) -> list[str]:
-    if not str(filename).endswith("modeling_florence2.py"):
-        return get_imports(filename)
-    imports = get_imports(filename)
-    if "flash_attn" in imports:
-        imports.remove("flash_attn")
-    return imports
-
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import Qwen2VLForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+from qwen_vl_utils import process_vision_info
 
 # ==========================================
 # 1. APEXKIT CONFIGURATION
@@ -48,60 +24,122 @@ COLLECTION_NAME = "pins"
 VALID_CATEGORIES = ['Architecture', 'Cyberpunk', 'Nature', 'Minimal', 'Abstract', 'Portrait', 'Fashion', 'Tech', 'Space']
 
 # ==========================================
-# 2. LOAD VISION MODEL (Florence-2-large)
+# 2. LOAD VISION MODEL (Qwen2-VL-7B-Instruct, 4-bit)
 # ==========================================
-print("🤖 Loading Florence-2-Large onto GPU...")
+print("🤖 Loading Qwen2-VL-7B-Instruct (4-bit) onto GPU...")
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-model_id = "microsoft/Florence-2-large"
+model_id = "Qwen/Qwen2-VL-7B-Instruct"
 
-with patch("transformers.dynamic_module_utils.get_imports", fixed_get_imports):
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id, 
-        torch_dtype=torch_dtype, 
-        trust_remote_code=True
-    ).to(device)
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True,
+)
 
-processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+model = Qwen2VLForConditionalGeneration.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto",
+)
+
+# Lower max_pixels caps VRAM use per image; raise if you want more detail
+processor = AutoProcessor.from_pretrained(
+    model_id,
+    min_pixels=256 * 28 * 28,
+    max_pixels=1024 * 28 * 28,
+)
 print(f"✅ Model loaded successfully on {device.upper()}!")
 
 # ==========================================
 # 3. AI GENERATION & CLASSIFICATION UTILS
 # ==========================================
-def run_florence_task(image: Image.Image, task_prompt: str) -> str:
-    """Runs a specific Florence-2 prompt task against a PIL image."""
-    inputs = processor(text=task_prompt, images=image, return_tensors="pt").to(device, torch_dtype)
-    
-    generated_ids = model.generate(
-        input_ids=inputs["input_ids"],
-        pixel_values=inputs["pixel_values"],
-        max_new_tokens=150,
-        num_beams=3
-    )
-    
-    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-    parsed_answer = processor.post_process_generation(
-        generated_text, 
-        task=task_prompt, 
-        image_size=(image.width, image.height)
-    )
-    return parsed_answer.get(task_prompt, "").strip()
+SYSTEM_PROMPT = (
+    "You are an image metadata generator for a Pinterest-style app. "
+    "Given an image, respond with ONLY a single valid JSON object, no markdown fences, no extra text. "
+    "Schema: {\"title\": string (<=60 chars), \"description\": string (1-2 sentences), "
+    "\"tags\": array of 3-6 short lowercase keywords, "
+    f"\"category\": one of exactly {VALID_CATEGORIES}}}"
+)
 
-def extract_tags_from_text(text: str) -> list:
-    """Simple stopword-filtered keyword extractor to build tags."""
-    stopwords = {"a", "an", "the", "in", "on", "of", "and", "or", "with", "is", "are", "to", "by", "for", "at", "from", "background", "foreground", "image", "photo", "picture", "shows", "featuring"}
-    words = re.findall(r'\b[a-zA-Z]{3,12}\b', text.lower())
-    unique_tags = []
-    for w in words:
-        if w not in stopwords and w not in unique_tags:
-            unique_tags.append(w)
-    return unique_tags[:6]  # Return top 6 tags
+def run_qwen_vl_task(image: Image.Image) -> dict:
+    """Runs a single Qwen2-VL chat pass over the image and returns parsed metadata dict."""
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": SYSTEM_PROMPT},
+            ],
+        }
+    ]
 
-def classify_category(title: str, description: str, tags: list) -> str:
-    """Classifies generated text into one of the valid Vortex category tags."""
+    text_prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    image_inputs, video_inputs = process_vision_info(messages)
+
+    inputs = processor(
+        text=[text_prompt],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    ).to(device)
+
+    with torch.no_grad():
+        generated_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
+
+    generated_ids_trimmed = [
+        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+    ]
+    output_text = processor.batch_decode(
+        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )[0].strip()
+
+    return parse_model_json(output_text)
+
+def parse_model_json(raw_text: str) -> dict:
+    """Extracts the JSON object from the model's raw text output, tolerating stray fences/text."""
+    cleaned = raw_text.strip()
+    cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
+    cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if not match:
+        return {}
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return {}
+
+def sanitize_result(result: dict) -> tuple:
+    """Validates/normalizes model output, falling back to safe defaults."""
+    title = str(result.get("title") or "AI Enriched Pin")[:60].title()
+
+    description = str(result.get("description") or "").strip()
+    if not description:
+        description = title
+
+    raw_tags = result.get("tags") or []
+    if not isinstance(raw_tags, list):
+        raw_tags = []
+    tags = []
+    for t in raw_tags:
+        t = str(t).strip().lower()
+        if t and t not in tags:
+            tags.append(t)
+    tags = tags[:6]
+
+    category = str(result.get("category") or "").strip()
+    if category not in VALID_CATEGORIES:
+        category = classify_category_fallback(title, description, tags)
+
+    return title, description, tags, category
+
+def classify_category_fallback(title: str, description: str, tags: list) -> str:
+    """Keyword-based safety net if the model returns an invalid/missing category."""
     corpus = f"{title} {description} {' '.join(tags)}".lower()
-    
+
     mapping = {
         "Fashion": ["fashion", "show", "dress", "outfit", "lingerie", "wear", "suit", "jacket", "clothing", "model", "wearing"],
         "Portrait": ["portrait", "pose", "posing", "face", "eyes", "young woman", "man", "woman", "person"],
@@ -111,13 +149,13 @@ def classify_category(title: str, description: str, tags: list) -> str:
         "Space": ["space", "nebula", "galaxy", "stars", "cosmos", "planet", "astronomy"],
         "Tech": ["tech", "technology", "computer", "robot", "screen", "circuit", "digital", "gadget"],
         "Minimal": ["minimal", "minimalist", "clean", "simple", "empty", "white background", "isolated"],
-        "Abstract": ["abstract", "pattern", "texture", "colors", "shapes", "geometric", "artistic", "paint"]
+        "Abstract": ["abstract", "pattern", "texture", "colors", "shapes", "geometric", "artistic", "paint"],
     }
-    
+
     for cat, keywords in mapping.items():
         if any(kw in corpus for kw in keywords):
             return cat
-            
+
     return "Fashion"  # Default safe fallback category
 
 # ==========================================
@@ -128,7 +166,7 @@ def fetch_pins_needing_enrichment(page=1, per_page=20):
     url = f"{APEXKIT_BASE_URL}/tenant/{TENANT_ID}/api/v1/collections/{COLLECTION_NAME}/records"
     headers = {"Authorization": f"Bearer {APEXKIT_TOKEN}"}
     params = {"page": page, "per_page": per_page}
-    
+
     response = requests.get(url, headers=headers, params=params)
     if response.status_code == 200:
         return response.json().get("items", [])
@@ -148,18 +186,18 @@ def update_pin_record(record_id: int, title: str, description: str, tags: list, 
     url = f"{APEXKIT_BASE_URL}/tenant/{TENANT_ID}/api/v1/collections/{COLLECTION_NAME}/records/{record_id}"
     headers = {
         "Authorization": f"Bearer {APEXKIT_TOKEN}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
-    
+
     payload = {
         "data": {
             "title": title,
             "description": description,
             "tags": tags,
-            "category": category  # <--- UPDATED PAYLOAD
+            "category": category,
         }
     }
-    
+
     response = requests.put(url, headers=headers, json=payload)
     return response.status_code in [200, 201]
 
@@ -169,58 +207,52 @@ def update_pin_record(record_id: int, title: str, description: str, tags: list, 
 def main():
     print(f"\n🚀 Starting AI Enrichment loop for tenant '{TENANT_ID}'...")
     page = 1
-    
+
     while True:
         pins = fetch_pins_needing_enrichment(page=page, per_page=15)
         if not pins:
             print("🏁 No more records found. Enrichment finished!")
             break
-            
+
         print(f"\n📄 Processing Page {page} ({len(pins)} records)...")
-        
+
         for pin in pins:
             record_id = pin["id"]
             data = pin.get("data", {})
             image_filename = data.get("image")
-            
+
             if not image_filename:
                 continue
-                
+
             print(f"\n🎨 Analyzing Pin ID {record_id} ({image_filename})...")
-            
+
             # 1. Download image to GPU RAM buffer
             pil_image = download_image(image_filename)
             if not pil_image:
                 print("  ⚠️ Failed to download image from storage.")
                 continue
-                
-            # 2. Generate Title (<CAPTION> task)
-            raw_title = run_florence_task(pil_image, "<CAPTION>")
-            ai_title = raw_title.title()[:60] if raw_title else "AI Enriched Pin"
-            
-            # 3. Generate Description (<MORE_DETAILED_CAPTION> task)
-            ai_description = run_florence_task(pil_image, "<MORE_DETAILED_CAPTION>")
-            if not ai_description:
-                ai_description = raw_title
-                
-            # 4. Extract Tags
-            ai_tags = extract_tags_from_text(ai_description)
-            
-            # 5. Classify Category based on text semantics
-            ai_category = classify_category(ai_title, ai_description, ai_tags)
-            
+
+            # 2. Single Qwen2-VL pass: title + description + tags + category
+            try:
+                raw_result = run_qwen_vl_task(pil_image)
+            except Exception as e:
+                print(f"  ⚠️ Model inference failed: {e}")
+                continue
+
+            ai_title, ai_description, ai_tags, ai_category = sanitize_result(raw_result)
+
             print(f"  ✨ Title:       {ai_title}")
             print(f"  📝 Description: {ai_description[:80]}...")
             print(f"  🏷️  Tags:        {ai_tags}")
             print(f"  📂 Category:    {ai_category}")
-            
-            # 6. Push updates back to ApexKit
+
+            # 3. Push updates back to ApexKit
             success = update_pin_record(record_id, ai_title, ai_description, ai_tags, ai_category)
             if success:
                 print("  💾 Successfully updated pin in ApexKit!")
             else:
                 print("  ❌ Failed to update pin record.")
-                
+
         page += 1
         time.sleep(0.5)
 
