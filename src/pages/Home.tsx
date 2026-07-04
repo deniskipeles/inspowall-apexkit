@@ -1,8 +1,9 @@
 import { CategoryPills } from '../components/CategoryPills';
 import { MasonryGrid, MasonryGridSkeleton } from '../components/MasonryGrid';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSearch } from '../context/SearchContext';
-import { X, ScanSearch, Loader2 } from 'lucide-react'; // <--- IMPORTED Loader2
+import { X, ScanSearch, Loader2 } from 'lucide-react';
 import ReactCrop, { type Crop } from 'react-image-crop';
 import { apex } from '../lib/apex';
 import { useAuth } from '../context/AuthContext';
@@ -13,8 +14,9 @@ const PER_PAGE = 15; // Standard page size for smooth layout loads
 
 export function Home() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedCategory = searchParams.get('category') || 'For You';
   const [categories, setCategories] = useState<string[]>(['For You']);
-  const [selectedCategory, setSelectedCategory] = useState('For You');
   const [isLoading, setIsLoading] = useState(true);
   const [pins, setPins] = useState<any[]>([]);
   const { searchQuery, searchImage, clearSearch } = useSearch();
@@ -24,6 +26,16 @@ export function Home() {
   // Pagination states
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+
+  const setSelectedCategory = (category: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (category === 'For You') {
+      nextParams.delete('category');
+    } else {
+      nextParams.set('category', category);
+    }
+    setSearchParams(nextParams);
+  };
 
   // Fetch dynamic database categories on mount
   useEffect(() => {
