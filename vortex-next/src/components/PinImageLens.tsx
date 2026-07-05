@@ -1,7 +1,6 @@
 'use client';
 
 import ReactCrop, { type Crop } from 'react-image-crop';
-import Image from 'next/image';
 import { ScanSearch, X, Download } from 'lucide-react';
 import 'react-image-crop/dist/ReactCrop.css';
 
@@ -39,11 +38,16 @@ export function PinImageLens({
           <img src={image || undefined} alt={title} className="w-full h-auto max-h-[85vh] object-contain" referrerPolicy="no-referrer" />
         </ReactCrop>
       ) : (
-        <div className="relative w-full h-full max-h-[85vh]">
-          <Image src={image} alt={title} fill sizes="50vw" className="object-contain" referrerPolicy="no-referrer" />
-        </div>
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={image || undefined}
+          alt={title}
+          className="w-full h-auto max-h-[85vh] object-contain"
+          referrerPolicy="no-referrer"
+        />
       )}
 
+      {/* Lens Toggle Button */}
       <div className="absolute top-4 right-4 flex gap-2 transition-opacity">
         <button
           onClick={() => {
@@ -53,11 +57,10 @@ export function PinImageLens({
               setCompletedCrop(null);
             }
           }}
-          className={`backdrop-blur-md p-3 rounded-full transition-colors flex items-center gap-2 ${
-            isLensMode
+          className={`backdrop-blur-md p-3 rounded-full transition-colors flex items-center gap-2 ${isLensMode
               ? 'bg-neon text-ink hover:bg-white'
               : 'bg-black/50 text-white hover:bg-black/80 opacity-100 md:opacity-0 md:group-hover:opacity-100'
-          }`}
+            }`}
           title={isLensMode ? 'Exit visual search' : 'Search by image section'}
         >
           {isLensMode ? <X size={20} /> : <ScanSearch size={20} />}

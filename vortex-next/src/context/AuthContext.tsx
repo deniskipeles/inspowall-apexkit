@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           apex.setToken(savedToken);
           const me = await apex.auth.getMe();
           if (me) {
-            const meData = me.data || me;
+            const meData = me.data?.metadata || me.data || me;
             setUser({
               id: me.id,
               name: meData.name || meData.email.split('@')[0],
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const res = await apex.auth.login(email, password);
-    const uData = res.user.data || res.user;
+    const uData = res.user.data?.metadata || res.user.data || res.user;
     localStorage.setItem('apex_token', res.token);
     setUser({
       id: res.user.id,
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const res = await apex.auth.register(email, password);
+    const res = await apex.auth.register(email, password, { name });
     localStorage.setItem('apex_token', res.token);
     setUser({
       id: res.user.id,

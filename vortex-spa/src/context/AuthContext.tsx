@@ -31,16 +31,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (savedToken) {
           // Manually load the persistent token into the ApexKit client instance
           apex.setToken(savedToken);
-          
+
           const me = await apex.auth.getMe();
           if (me) {
-            const meData = me.data || me;
+            const meData = me?.data?.metadata || me.data || me;
             setUser({
               id: me.id,
               name: meData.name || meData.email.split('@')[0],
               email: meData.email,
               handle: meData.handle || `@${meData.email.split('@')[0]}`,
-              avatar: meData.avatar ? apex.files.getFileUrl(meData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${meData.email}`
+              avatar: meData.avatar ? await apex.files.getFileUrl(meData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${meData.email}`
             });
           }
         }
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const res = await apex.auth.login(email, password);
-    const uData = res.user.data || res.user;
-    
+    const uData = res.user.data?.metadata || res.user.data || res.user;
+
     // Persist token locally
     localStorage.setItem('apex_token', res.token);
 
@@ -68,13 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: uData.name || uData.email.split('@')[0],
       email: uData.email,
       handle: uData.handle || `@${uData.email.split('@')[0]}`,
-      avatar: uData.avatar ? apex.files.getFileUrl(uData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${uData.email}`
+      avatar: uData.avatar ? await apex.files.getFileUrl(uData.avatar) : `https://api.dicebear.com/7.x/avataaars/svg?seed=${uData.email}`
     });
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const res = await apex.auth.register(email, password);
-    
+    const res = await apex.auth.register(email, password, { name });
+
     // Persist token locally
     localStorage.setItem('apex_token', res.token);
 
