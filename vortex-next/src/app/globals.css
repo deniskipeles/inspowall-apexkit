@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Light-mode default tokens */
+:root {
+  --ink: #ffffff;
+  --ink-invert: #0a0a0a;
+  --surface: #f4f4f5;
+}
+
+/* Dark-mode overrides — toggled via .dark on <html> */
+.dark {
+  --ink: #0a0a0a;
+  --ink-invert: #ffffff;
+  --surface: #18181b;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-invert: var(--ink-invert);
+  --color-surface: var(--surface);
+  --color-neon: #ccff00;
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

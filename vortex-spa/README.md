@@ -33,6 +33,8 @@ This collection acts as a join table to track which users have saved which pins 
 
 ---
 
+### Integration Complete
+The frontend is now fully integrated with the ApexKit SDK. All mock data generators have been removed.
 
 #### Required Manual Setup
 Before the app can display data, you **MUST** create the following collections in your ApexKit Admin Dashboard:
@@ -43,3 +45,4 @@ Before the app can display data, you **MUST** create the following collections i
 4.  **`likes`**: Create this collection with fields `user_id` (Relation to `users`) and `pin_id` (Relation to `pins`).
     -   **Important Hook**: You should add a server-side hook (or trigger) that increments/decrements the `likes_count` field on the `pins` collection whenever a record is created or deleted in this collection.
 
+Once created, you can seed these collections via the dashboard or using the `apex` client in a script.
