@@ -97,10 +97,8 @@ export function PinDetailClient({
             results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
           }
         } else if (isLensMode) {
-          // ← leave this branch as-is, don't touch it
           results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
         } else {
-          // ← leave this branch as-is too — default vector/title search
           try {
             const vectors = await apex.collection('pins').getVector(pin.id);
             const imageVector = vectors.find((v: any) => v.field_name === 'image')?.vector;
