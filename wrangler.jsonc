@@ -1,7 +1,10 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "inspowall-next/node_modules/wrangler/config-schema.json",
   "name": "inspowall",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
-  "pages_build_output_dir": "inspowall-next/.open-next/assets"
+  "pages_build_output_dir": "inspowall-next/.open-next/assets",
+  "vars": {
+    "NEXT_PRIVATE_MINIMAL_MODE": "1"
+  }
 }
