@@ -85,17 +85,37 @@ export function PinDetailClient({
       setIsLoadingSimilar(true);
       try {
         let results: any[] = [];
-        if (completedCrop && completedCrop.width && completedCrop.height) {
+        if (isLensMode && completedCrop && completedCrop.width && completedCrop.height) {
           try {
-            const croppedImage = await getCroppedImg(pin.image, completedCrop);
+            const imgElement = document.querySelector('.ReactCrop img') as HTMLImageElement;
+            const croppedImage = await getCroppedImg(pin.image, completedCrop, imgElement);
             results = croppedImage
               ? await apex.collection('pins').searchImageVectorWithImage(croppedImage, 15)
               : await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
-          } catch {
+          } catch (err) {
+            console.error('Failed to crop image for search:', err);
             results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
           }
-        } else {
+        } else if (isLensMode) {
+          // ← leave this branch as-is, don't touch it
           results = await apex.collection('pins').searchImageVectorWithImage(pin.image, 15);
+        } else {
+          // ← leave this branch as-is too — default vector/title search
+          try {
+            const vectors = await apex.collection('pins').getVector(pin.id);
+            const imageVector = vectors.find((v: any) => v.field_name === 'image')?.vector;
+            if (imageVector) {
+              const res = await apex.collection('pins').searchVectorWithVector('image', imageVector, { limit: 15 });
+              results = res.items || res;
+            } else {
+              const res = await apex.collection('pins').searchVectorWithText(pin.title, { limit: 15 });
+              results = res.items || res;
+            }
+          } catch (err) {
+            console.error('Vector search failed, falling back to title search', err);
+            const res = await apex.collection('pins').searchVectorWithText(pin.title, { limit: 15 });
+            results = res.items || res;
+          }
         }
 
         const mapped = (results || [])
