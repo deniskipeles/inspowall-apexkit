@@ -6,5 +6,12 @@
   "pages_build_output_dir": "inspowall-next/.open-next/assets",
   "vars": {
     "NEXT_PRIVATE_MINIMAL_MODE": "1"
-  }
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.js", "**/*.css", "**/*.woff2"],
+      "fallthrough": true
+    }
+  ]
 }

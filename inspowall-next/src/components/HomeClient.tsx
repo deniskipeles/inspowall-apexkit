@@ -7,7 +7,7 @@ import { useSearch } from '@/context/SearchContext';
 import { useRouter } from 'next/navigation';
 import { X, ScanSearch, ChevronLeft, ChevronRight } from 'lucide-react';
 import ReactCrop, { type Crop } from 'react-image-crop';
-import { apex } from '@/lib/apex';
+import { apex, getImageUrl } from '@/lib/apex';
 import { useAuth } from '@/context/AuthContext';
 import { getCroppedImg } from '@/lib/imageUtils';
 import 'react-image-crop/dist/ReactCrop.css';
@@ -95,18 +95,20 @@ export function HomeClient({
           results = await apex.collection('pins').searchImageVectorWithText(searchQuery, 60);
         }
 
-        const mapped = (results || []).map((record: any) => {
-          const data = record.data || record;
-          return {
-            id: record.id,
-            image: apex.files.getFileUrl(data.image, '300x0'),
-            title: data.title,
-            author: data.author || 'Anonymous',
-            category: data.category,
-            height: data.height || 300,
-            likes_count: data.likes_count || 0,
-          };
-        });
+        const mapped = await Promise.all(
+          (results || []).map(async (record: any) => {
+            const data = record.data || record;
+            return {
+              id: record.id,
+              image: await getImageUrl(data.image, '300x0'),
+              title: data.title,
+              author: data.author || 'Anonymous',
+              category: data.category,
+              height: data.height || 300,
+              likes_count: data.likes_count || 0,
+            };
+          })
+        );
 
         let likedPinIds = new Set<string | number>();
         let savedPinIds = new Set<string | number>();

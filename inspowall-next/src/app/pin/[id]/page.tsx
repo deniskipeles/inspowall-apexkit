@@ -1,4 +1,4 @@
-import { apex } from '@/lib/apex';
+import { apex, getImageUrl } from '@/lib/apex';
 import { PinDetailClient } from '@/components/PinDetailClient';
 import type { Metadata } from 'next';
 
@@ -16,9 +16,9 @@ async function getPin(id: string) {
       author: authorData.name || data.author || record?.expand?.author_id?.name || record?.expand?.author_id?.nickname || 'Anonymous',
       authorHandle: authorData.handle || '@anonymous',
       authorAvatar: authorData.avatar
-        ? await apex.files.getFileUrl(authorData.avatar)
+        ? await getImageUrl(authorData.avatar)
         : `https://api.dicebear.com/7.x/avataaars/svg?seed=${record.id}`,
-      image: await apex.files.getFileUrl(data.image),
+      image: await getImageUrl(data.image),
       tags: data.tags || [],
       likes_count: data.likes_count || 0,
       category: data.category,
@@ -48,11 +48,11 @@ async function getSimilarPins(pin: NonNullable<Awaited<ReturnType<typeof getPin>
 
     return (results || [])
       .filter((r: any) => r && r.id !== pin.id)
-      .map((r: any) => {
+      .map(async (r: any) => {
         const rData = r.data || r;
         return {
           id: r.id,
-          image: apex.files.getFileUrl(rData.image, '300x0'),
+          image: await getImageUrl(rData.image, '300x0'),
           title: rData.title,
           author: rData.author || 'Anonymous',
           category: rData.category,

@@ -6,7 +6,7 @@ import { MasonryGrid, MasonryGridSkeleton } from './MasonryGrid';
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { type Crop } from 'react-image-crop';
-import { apex } from '@/lib/apex';
+import { apex, getImageUrl } from '@/lib/apex';
 import { useAuth } from '@/context/AuthContext';
 import { getCroppedImg } from '@/lib/imageUtils';
 import { PinImageLens } from './PinImageLens';
@@ -116,20 +116,22 @@ export function PinDetailClient({
           }
         }
 
-        const mapped = (results || [])
-          .filter((r: any) => r && r.id !== pin.id)
-          .map((r: any) => {
-            const rData = r.data || r;
-            return {
-              id: r.id,
-              image: apex.files.getFileUrl(rData.image, '300x0'),
-              title: rData.title,
-              author: rData.author || 'Anonymous',
-              category: rData.category,
-              height: rData.height || 300,
-              likes_count: rData.likes_count || 0,
-            };
-          });
+        const mapped = await Promise.all(
+          (results || [])
+            .filter((r: any) => r && r.id !== pin.id)
+            .map(async (r: any) => {
+              const rData = r.data || r;
+              return {
+                id: r.id,
+                image: await getImageUrl(rData.image, '300x0'),
+                title: rData.title,
+                author: rData.author || 'Anonymous',
+                category: rData.category,
+                height: rData.height || 300,
+                likes_count: rData.likes_count || 0,
+              };
+            })
+        );
 
         let likedPinIds = new Set<string | number>();
         let savedPinIds = new Set<string | number>();

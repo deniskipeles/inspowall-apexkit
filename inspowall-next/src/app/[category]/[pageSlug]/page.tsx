@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation';
 import { apex, getImageUrl } from '@/lib/apex';
 import { HomeClient } from '@/components/HomeClient';
 import type { Metadata } from 'next';
@@ -52,56 +53,35 @@ async function getInitialData(category: string, page: number, filter: Record<str
 
 export async function generateMetadata({
     params,
-    searchParams,
 }: {
-    params: Promise<{ category: string }>;
-    searchParams: Promise<{ page?: string }>;
+    params: Promise<{ category: string; pageSlug: string }>;
 }): Promise<Metadata> {
-    const { category } = await params;
-    const { page } = await searchParams;
+    const { category, pageSlug } = await params;
+    const match = pageSlug.match(/^page-(\d+)$/);
+    if (!match) return {};
 
-    const homePageMatch = category.match(/^page-(\d+)$/);
-    if (homePageMatch) {
-        return { title: `Page ${homePageMatch[1]} | Vortex` };
-    }
-
-    const pageNum = parseInt(page || '1', 10);
+    const pageNum = parseInt(match[1], 10);
     const label = category.split('-').map((w) => w.replace(/[a-z]/, (c) => c.toUpperCase())).join(' ');
-    return { title: pageNum > 1 ? `${label} — Page ${pageNum} | Vortex` : `${label} | Vortex` };
+    return { title: `${label} — Page ${pageNum} | Vortex` };
 }
 
-export default async function CategoryPage({
+export default async function CategoryPagedPage({
     params,
     searchParams,
 }: {
-    params: Promise<{ category: string }>;
-    searchParams: Promise<{ page?: string; filter?: string }>;
+    params: Promise<{ category: string; pageSlug: string }>;
+    searchParams: Promise<{ filter?: string }>;
 }) {
-    const { category } = await params;
-    const { page: pageParam, filter: filterParam } = await searchParams;
+    const { category, pageSlug } = await params;
 
-    // /page-2, /page-3 etc are home pagination, not categories
-    const homePageMatch = category.match(/^page-(\d+)$/);
-    if (homePageMatch) {
-        const page = parseInt(homePageMatch[1], 10);
-        const filter = filterParam ? JSON.parse(decodeURIComponent(filterParam)) : {};
-        const { initialPins, initialTotal, categories } = await getInitialData('for-you', page, filter);
-        return (
-            <HomeClient
-                initialPins={initialPins}
-                initialTotal={initialTotal}
-                initialCategories={categories}
-                perPage={PER_PAGE}
-                initialPage={page}
-                initialFilter={filter}
-                initialCategory="for-you"
-            />
-        );
-    }
+    // Only "page-N" is valid here — anything else is a 404, not a crash
+    const match = pageSlug.match(/^page-(\d+)$/);
+    if (!match) notFound();
 
-    // rest of the existing category logic unchanged...
-    const page = parseInt(pageParam || '1', 10);
+    const page = parseInt(match[1], 10);
+    const { filter: filterParam } = await searchParams;
     const filter = filterParam ? JSON.parse(decodeURIComponent(filterParam)) : {};
+
     const { initialPins, initialTotal, categories } = await getInitialData(category, page, filter);
 
     return (

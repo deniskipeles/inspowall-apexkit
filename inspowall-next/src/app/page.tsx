@@ -1,4 +1,4 @@
-import { apex } from '@/lib/apex';
+import { apex, getImageUrl } from '@/lib/apex';
 import { HomeClient } from '@/components/HomeClient';
 
 const PER_PAGE = 15;
@@ -14,21 +14,23 @@ async function getInitialData(page: number, filter: Record<string, any>) {
     apex.scripts.run('get-categories', {}).catch(() => []),
   ]);
 
-  const mappedPins = (pinsList.items || []).map((record: any) => {
-    const data = record.data || record;
-    const authorObj = record.expand?.author_id;
-    const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
-    const authorData = (authorRecord?.metadata || authorRecord) || {};
-    return {
-      id: record.id,
-      image: apex.files.getFileUrl(data.image, '300x0'),
-      title: data.title,
-      author: authorData.name || data.author || 'Anonymous',
-      category: data.category,
-      height: data.height || 300,
-      likes_count: data.likes_count || 0,
-    };
-  });
+  const mappedPins = await Promise.all(
+    (pinsList.items || []).map(async (record: any) => {
+      const data = record.data || record;
+      const authorObj = record.expand?.author_id;
+      const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
+      const authorData = (authorRecord?.metadata || authorRecord) || {};
+      return {
+        id: record.id,
+        image: await getImageUrl(data.image, '300x0'),
+        title: data.title,
+        author: authorData.name || data.author || 'Anonymous',
+        category: data.category,
+        height: data.height || 300,
+        likes_count: data.likes_count || 0,
+      };
+    })
+  );
 
   return {
     initialPins: mappedPins,

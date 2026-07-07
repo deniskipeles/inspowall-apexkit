@@ -6,7 +6,7 @@ import { redirect, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { MasonryGrid, MasonryGridSkeleton } from './MasonryGrid';
 import { LogOut } from 'lucide-react';
-import { apex } from '@/lib/apex';
+import { apex, getImageUrl } from '@/lib/apex';
 
 export function ProfileClient() {
   const { user, loading, logout } = useAuth();
@@ -32,22 +32,24 @@ export function ProfileClient() {
           });
         }
 
-        const mapped = (results || []).filter(Boolean).map((p: any) => {
-          const pData = p.data || p;
-          const authorObj = p.expand?.author_id;
-          const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
-          const authorData = (authorRecord?.metadata || authorRecord) || {};
+        const mapped = await Promise.all(
+          (results || []).filter(Boolean).map(async (p: any) => {
+            const pData = p.data || p;
+            const authorObj = p.expand?.author_id;
+            const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
+            const authorData = (authorRecord?.metadata || authorRecord) || {};
 
-          return {
-            id: p.id,
-            image: apex.files.getFileUrl(pData.image, '300x0'),
-            title: pData.title,
-            author: authorData.name || pData.author || 'Anonymous',
-            category: pData.category,
-            height: pData.height || 300,
-            likes_count: pData.likes_count || 0,
-          };
-        });
+            return {
+              id: p.id,
+              image: await getImageUrl(pData.image, '300x0'),
+              title: pData.title,
+              author: authorData.name || pData.author || 'Anonymous',
+              category: pData.category,
+              height: pData.height || 300,
+              likes_count: pData.likes_count || 0,
+            };
+          })
+        );
 
         let likedPinIds = new Set<string | number>();
         let savedPinIds = new Set<string | number>();
