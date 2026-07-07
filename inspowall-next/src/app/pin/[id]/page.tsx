@@ -46,20 +46,23 @@ async function getSimilarPins(pin: NonNullable<Awaited<ReturnType<typeof getPin>
       results = res.items || res;
     }
 
-    return (results || [])
-      .filter((r: any) => r && r.id !== pin.id)
-      .map(async (r: any) => {
-        const rData = r.data || r;
-        return {
-          id: r.id,
-          image: await getImageUrl(rData.image, '300x0'),
-          title: rData.title,
-          author: rData.author || 'Anonymous',
-          category: rData.category,
-          height: rData.height || 300,
-          likes_count: rData.likes_count || 0,
-        };
-      });
+    // Wrap the mapped array in Promise.all so all image URLs resolve before returning
+    return Promise.all(
+      (results || [])
+        .filter((r: any) => r && r.id !== pin.id)
+        .map(async (r: any) => {
+          const rData = r.data || r;
+          return {
+            id: r.id,
+            image: await getImageUrl(rData.image, '300x0'),
+            title: rData.title,
+            author: rData.author || 'Anonymous',
+            category: rData.category,
+            height: rData.height || 300,
+            likes_count: rData.likes_count || 0,
+          };
+        })
+    );
   } catch {
     return [];
   }
