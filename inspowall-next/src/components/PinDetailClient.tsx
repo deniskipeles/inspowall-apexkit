@@ -158,6 +158,43 @@ export function PinDetailClient({
     fetchSimilar();
   }, [pin, isLensMode, completedCrop, user]);
 
+  // Hydrate liked/saved state on SSR-fetched similar pins once user is known
+  useEffect(() => {
+    const hydrateSimilar = async () => {
+      if (!user || initialSimilarPins.length === 0) return;
+      const pinIds = initialSimilarPins.map((p) => p.id);
+      try {
+        const [likesRes, savedRes] = await Promise.all([
+          apex.collection('likes').list({
+            filter: { $and: [{ user_id: user.id, pin_id: { $in: pinIds } }] },
+            per_page: 100,
+          }),
+          apex.collection('saved_pins').list({
+            filter: { $and: [{ user_id: user.id, pin_id: { $in: pinIds } }] },
+            per_page: 100,
+          }),
+        ]);
+
+        const likedPinIds = new Set<string | number>();
+        const savedPinIds = new Set<string | number>();
+        likesRes.items.forEach((item: any) => { if (item.data?.pin_id) likedPinIds.add(item.data.pin_id); });
+        savedRes.items.forEach((item: any) => { if (item.data?.pin_id) savedPinIds.add(item.data.pin_id); });
+
+        setSimilarPins(
+          initialSimilarPins.map((p) => ({
+            ...p,
+            initiallyLiked: likedPinIds.has(p.id),
+            initiallySaved: savedPinIds.has(p.id),
+          }))
+        );
+      } catch (err) {
+        console.error('Failed to hydrate similar pins likes/saves:', err);
+      }
+    };
+
+    hydrateSimilar();
+  }, [user, initialSimilarPins]);
+
   const handleToggleLike = async () => {
     if (!user) {
       router.push('/login');

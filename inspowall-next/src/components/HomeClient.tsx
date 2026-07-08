@@ -65,6 +65,44 @@ export function HomeClient({
     setPins(initialPins);
   }, [initialPins]);
 
+  // Hydrate liked/saved on the SSR-fetched initial pins once user is known.
+  // Runs once per page load — patches initialPins in-place without a re-fetch.
+  useEffect(() => {
+    const hydrate = async () => {
+      if (!user || initialPins.length === 0) return;
+      const pinIds = initialPins.map((p) => p.id);
+      try {
+        const [likesRes, savedRes] = await Promise.all([
+          apex.collection('likes').list({
+            filter: { $and: [{ user_id: user.id, pin_id: { $in: pinIds } }] },
+            per_page: 100,
+          }),
+          apex.collection('saved_pins').list({
+            filter: { $and: [{ user_id: user.id, pin_id: { $in: pinIds } }] },
+            per_page: 100,
+          }),
+        ]);
+
+        const likedIds = new Set<string | number>();
+        const savedIds = new Set<string | number>();
+        likesRes.items.forEach((item: any) => { if (item.data?.pin_id) likedIds.add(item.data.pin_id); });
+        savedRes.items.forEach((item: any) => { if (item.data?.pin_id) savedIds.add(item.data.pin_id); });
+
+        setPins((prev) =>
+          prev.map((p) => ({
+            ...p,
+            initiallyLiked: likedIds.has(p.id),
+            initiallySaved: savedIds.has(p.id),
+          }))
+        );
+      } catch (err) {
+        console.error('Failed to hydrate liked/saved state:', err);
+      }
+    };
+
+    hydrate();
+  }, [user, initialPins]);
+
   // --- Search (client-side only, bypasses SSR pagination) ---
   useEffect(() => {
     if (!searchQuery && !searchImage) {
