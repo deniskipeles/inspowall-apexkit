@@ -22,6 +22,7 @@ async function getPin(id: string) {
       tags: data.tags || [],
       likes_count: data.likes_count || 0,
       category: data.category,
+      metadata: data.metadata || null,
     };
   } catch {
     return null;
