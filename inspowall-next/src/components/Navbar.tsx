@@ -175,7 +175,7 @@ export function Navbar() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${apex.baseUrl}/logo`} alt="InspoWall" className="w-full h-full object-cover" />
           </div>
-          <span className="font-display font-bold text-xl hidden md:block tracking-tight group-hover:text-neon transition-colors text-ink-invert">VORTEX</span>
+          <span className="font-display font-bold text-xl hidden md:block tracking-tight group-hover:text-neon transition-colors text-ink-invert">INSPOWALL</span>
         </Link>
 
         {/* Search */}
