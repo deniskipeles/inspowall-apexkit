@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { apex } from '@/lib/apex';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -29,8 +30,9 @@ export function LoginForm() {
     <div className="min-h-[80vh] flex items-center justify-center px-4">
       <div className="bg-surface border border-black/10 dark:border-white/10 p-8 rounded-3xl w-full max-w-md shadow-2xl">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-neon rounded-xl flex items-center justify-center transform -rotate-6 mx-auto mb-4 shadow-[0_0_15px_rgba(204,255,0,0.3)]">
-            <span className="text-[#050505] font-display font-black text-2xl">V</span>
+          <div className="w-12 h-12 rounded-xl overflow-hidden transform -rotate-6 mx-auto mb-4 shadow-[0_0_15px_rgba(204,255,0,0.3)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${apex.baseUrl}/logo`} alt="InspoWall" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-3xl font-display font-bold text-ink-invert">Welcome back</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2">Log in to find your next inspiration</p>

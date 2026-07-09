@@ -3,13 +3,26 @@ import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/Providers';
 import { Navbar } from '@/components/Navbar';
+import { apex } from '@/lib/apex';
+import { Footer } from '@/components/Footer';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space-grotesk' });
 
 export const metadata: Metadata = {
-  title: 'Vortex',
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://inspowall.pages.dev'
+      : 'http://localhost:3000')
+  ),
+  title: 'InspoWall',
   description: 'A modern, brutalist image sharing platform.',
+  icons: {
+    icon: `${apex.baseUrl}/logo`,
+    shortcut: `${apex.baseUrl}/logo`,
+    apple: `${apex.baseUrl}/logo`,
+  },
 };
 
 // Inline, blocking script that applies the .dark class before first paint,
@@ -38,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="pt-24 px-4 md:px-8 pb-12 max-w-[1800px] mx-auto min-h-screen">
             {children}
           </main>
+          <Footer />
         </Providers>
       </body>
     </html>

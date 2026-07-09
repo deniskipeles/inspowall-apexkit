@@ -171,8 +171,9 @@ export function Navbar() {
       <div className="flex items-center justify-between px-4 py-3 gap-4 max-w-[1800px] mx-auto">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 bg-neon rounded-xl flex items-center justify-center transform -rotate-6 shadow-[0_0_15px_rgba(204,255,0,0.3)] group-hover:rotate-0 transition-transform duration-300">
-            <span className="text-[#050505] font-display font-black text-xl">V</span>
+          <div className="w-10 h-10 rounded-xl overflow-hidden transform -rotate-6 shadow-[0_0_15px_rgba(204,255,0,0.3)] group-hover:rotate-0 transition-transform duration-300 flex-shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${apex.baseUrl}/logo`} alt="InspoWall" className="w-full h-full object-cover" />
           </div>
           <span className="font-display font-bold text-xl hidden md:block tracking-tight group-hover:text-neon transition-colors text-ink-invert">VORTEX</span>
         </Link>

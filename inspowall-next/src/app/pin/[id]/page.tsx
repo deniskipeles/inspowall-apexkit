@@ -9,20 +9,46 @@ async function getPin(id: string) {
     const authorObj = record.expand?.author_id;
     const authorRecord = Array.isArray(authorObj) ? authorObj[0] : authorObj;
     const authorData = (authorRecord?.metadata || authorRecord) || {};
+    const metadata = data.metadata || null;
+
+    // Resolve author from metadata if present, else fall back to DB author
+    let author = authorData.name || data.author || 'Anonymous';
+    let authorHandle = authorData.handle || '@anonymous';
+    let authorAvatar = authorData.avatar
+      ? await getImageUrl(authorData.avatar)
+      : `https://api.dicebear.com/7.x/avataaars/svg?seed=${record.id}`;
+
+    if (metadata && typeof metadata === 'object' && Object.keys(metadata).length > 0) {
+      const source = metadata.src?.original?.includes('pexels.com') || metadata.photographer
+        ? 'pexels'
+        : metadata.alternative_slugs || metadata.urls?.raw?.includes('unsplash.com')
+        ? 'unsplash'
+        : null;
+
+      if (source === 'pexels' && metadata.photographer) {
+        author = metadata.photographer;
+        authorHandle = `@${metadata.photographer.toLowerCase().replace(/\s+/g, '-')}`;
+        authorAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${metadata.photographer_id || metadata.photographer}`;
+      } else if (source === 'unsplash' && metadata.user) {
+        author = metadata.user.name || metadata.user.username;
+        authorHandle = `@${metadata.user.username}`;
+        authorAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${metadata.user.username || metadata.user.id}`;
+      }
+    }
+
     return {
       id: record.id,
       title: data.title,
       description: data.description,
-      author: authorData.name || data.author || record?.expand?.author_id?.name || record?.expand?.author_id?.nickname || 'Anonymous',
-      authorHandle: authorData.handle || '@anonymous',
-      authorAvatar: authorData.avatar
-        ? await getImageUrl(authorData.avatar)
-        : `https://api.dicebear.com/7.x/avataaars/svg?seed=${record.id}`,
+      author,
+      authorHandle,
+      authorAvatar,
       image: await getImageUrl(data.image),
       tags: data.tags || [],
       likes_count: data.likes_count || 0,
       category: data.category,
-      metadata: data.metadata || null,
+      metadata,
+      logo:apex.baseUrl
     };
   } catch {
     return null;
