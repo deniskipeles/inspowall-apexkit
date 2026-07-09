@@ -7,7 +7,7 @@ export function Footer() {
     {
       name: 'ApexKit',
       url: 'https://github.com/deniskipeles/apexkit',
-      description: 'Multi Tenancy Backend',
+      description: 'MultiTenancy Baas',
     },
     {
       name: 'Inspowall',
@@ -24,6 +24,16 @@ export function Footer() {
       url: 'https://www.pexels.com',
       description: 'Photography',
     },
+    {
+      name: 'Cloudflare',
+      url: 'https://pages.cloudflare.com',
+      description: 'Frontend hosting',
+    },
+    {
+      name: 'Hugging Face',
+      url: 'https://huggingface.co/spaces',
+      description: 'Backend hosting',
+    },
   ];
 
   return (
@@ -33,10 +43,10 @@ export function Footer() {
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg overflow-hidden transform -rotate-6 shadow-[0_0_10px_rgba(204,255,0,0.2)] flex-shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${apex.baseUrl}/logo`} alt="Vortex" className="w-full h-full object-cover" />
+            <img src={`${apex.baseUrl}/logo`} alt="InspoWall" className="w-full h-full object-cover" />
           </div>
           <div>
-            <span className="font-display font-bold text-sm text-ink-invert">VORTEX</span>
+            <span className="font-display font-bold text-sm text-ink-invert">InspoWall</span>
             <p className="text-xs text-gray-500">© {year} All rights reserved.</p>
           </div>
         </div>

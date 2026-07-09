@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { apex } from '@/lib/apex';
 
 export function RegisterForm() {
   const [name, setName] = useState('');
@@ -31,9 +32,10 @@ export function RegisterForm() {
       <div className="bg-surface border border-black/10 dark:border-white/10 p-8 rounded-3xl w-full max-w-md shadow-2xl">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-neon rounded-xl flex items-center justify-center transform -rotate-6 mx-auto mb-4 shadow-[0_0_15px_rgba(204,255,0,0.3)]">
-            <span className="text-[#050505] font-display font-black text-2xl">V</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`${apex.baseUrl}/logo`} alt="InspoWall" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-3xl font-display font-bold text-ink-invert">Join Vortex</h1>
+          <h1 className="text-3xl font-display font-bold text-ink-invert">Join InspoWall</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-2">Discover and save your next big idea</p>
         </div>
 

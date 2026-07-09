@@ -149,7 +149,7 @@ export function PinCard({ id, image, title, author, height, initiallySaved = fal
               className="flex items-center gap-2 bg-white/10 backdrop-blur-md py-2 px-3 rounded-full hover:bg-white/20 transition-colors text-xs font-medium text-white"
             >
               <ArrowUpRight size={14} />
-              <span>vortex.io</span>
+              <span>inspo.photo</span>
             </a>
             <button
               onClick={(e) => {
