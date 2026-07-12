@@ -1,9 +1,10 @@
 import { ApexKit } from '@apexkit/sdk';
 
 const APP_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://127.0.0.1:5000';
+const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID?.trim() || 'vortex';
 
 export const apexRoot = new ApexKit(APP_URL);
-export const apex = apexRoot.tenant('vortex');
+export const apex = apexRoot.tenant(TENANT_ID);
 
 // Cloudflare's free plan caps image resizing at 10k unique transforms/month.
 // We always ask our backend to do the resize (backend=true), which means the

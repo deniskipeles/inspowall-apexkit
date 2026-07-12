@@ -62,7 +62,7 @@ export async function generateMetadata({
 
     const pageNum = parseInt(match[1], 10);
     const label = category.split('-').map((w) => w.replace(/[a-z]/, (c) => c.toUpperCase())).join(' ');
-    return { title: `${label} — Page ${pageNum} | Vortex` };
+    return { title: `${label} — Page ${pageNum} | InspoWall` };
 }
 
 export default async function CategoryPagedPage({

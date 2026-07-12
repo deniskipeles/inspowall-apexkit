@@ -1,6 +1,7 @@
 import { apex, getImageUrl } from '@/lib/apex';
 import { HomeClient } from '@/components/HomeClient';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
 const PER_PAGE = 15;
 
@@ -62,12 +63,12 @@ export async function generateMetadata({
 
     const homePageMatch = category.match(/^page-(\d+)$/);
     if (homePageMatch) {
-        return { title: `Page ${homePageMatch[1]} | Vortex` };
+        return { title: `Page ${homePageMatch[1]} | InspoWall` };
     }
 
     const pageNum = parseInt(page || '1', 10);
     const label = category.split('-').map((w) => w.replace(/[a-z]/, (c) => c.toUpperCase())).join(' ');
-    return { title: pageNum > 1 ? `${label} — Page ${pageNum} | Vortex` : `${label} | Vortex` };
+    return { title: pageNum > 1 ? `${label} — Page ${pageNum} | InspoWall` : `${label} | InspoWall` };
 }
 
 export default async function CategoryPage({
@@ -79,6 +80,11 @@ export default async function CategoryPage({
 }) {
     const { category } = await params;
     const { page: pageParam, filter: filterParam } = await searchParams;
+
+    // Safety net: @username leaked through middleware — hard redirect
+    if (category.startsWith('@')) {
+        redirect(`/u/${category.slice(1)}`);
+    }
 
     // /page-2, /page-3 etc are home pagination, not categories
     const homePageMatch = category.match(/^page-(\d+)$/);

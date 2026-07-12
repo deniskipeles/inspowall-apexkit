@@ -102,12 +102,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const pin = await getPin(id);
-  if (!pin) return { title: 'Pin not found | Vortex' };
+  if (!pin) return { title: 'Pin not found | InspoWall' };
 
   const imageUrl = await pin.image;
 
   return {
-    title: `${pin.title} | Vortex`,
+    title: `${pin.title} | InspoWall`,
     description: pin.description,
     openGraph: {
       title: pin.title,
