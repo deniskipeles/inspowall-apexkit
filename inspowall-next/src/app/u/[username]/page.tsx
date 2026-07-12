@@ -35,10 +35,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { username } = await params;
   const profile = await getProfile(username);
-  if (!profile) return { title: `@${username} | Vortex` };
+  if (!profile) return { title: `@${username} | InspoWall` };
   return {
-    title: `${profile.name} (@${username}) | Vortex`,
-    description: profile.bio || `Check out ${profile.name}'s pins on Vortex.`,
+    title: `${profile.name} (@${username}) | InspoWall`,
+    description: profile.bio || `Check out ${profile.name}'s pins on InspoWall.`,
   };
 }
 
