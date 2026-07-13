@@ -19,8 +19,8 @@ COLLECTION_NAME = "pins"
 START_PAGE = 1
 TOTAL_PAGES = 20
 PER_PAGE = 30
-SEARCH_QUERY = "semi nude, nsfw, sexual, intimate"
-DEFAULT_CATEGORY = "nsfw"
+SEARCH_QUERY = "black woman, lady or a girl"
+DEFAULT_CATEGORY = "black woman"
 PRODUCTION = "production-"
 # File to keep track of successfully uploaded image IDs
 TRACKING_FILE = PRODUCTION + "unsplash-successful-fetched-images.json"

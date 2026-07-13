@@ -19,8 +19,8 @@ COLLECTION_NAME = "pins"
 START_PAGE = 1
 TOTAL_PAGES = 10
 PER_PAGE = 50
-SEARCH_QUERY = "semi nude"
-DEFAULT_CATEGORY = "nsfw"
+SEARCH_QUERY = "black woman, lady or a girl"
+DEFAULT_CATEGORY = "black woman"
 PRODUCTION = "production-"
 # File to keep track of successfully uploaded image IDs
 TRACKING_FILE = PRODUCTION + "pexels-successful-fetched-images.json"
@@ -205,7 +205,7 @@ def main():
                 print("  ⏭️  Already processed. Skipping.")
                 continue
 
-            image_url = photo['src']['large']
+            image_url = photo['src']['large2x']
             original_filename = f"pexels_{photo_id}.jpg"
 
             # 1. Download & Upload Image
