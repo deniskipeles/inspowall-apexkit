@@ -8,19 +8,17 @@ import random
 # CONFIGURATION
 # ==========================================
 UNSPLASH_ACCESS_KEY = "get-one-from-there-site"
-APEXKIT_BASE_URL = "http://127.0.0.1:5000e"  # Change if hosted remotely
+APEXKIT_BASE_URL = "http://127.0.0.1:5000"  # Change if hosted remotely
 APEXKIT_TOKEN = "YOUR_APEXKIT_ADMIN_TOKEN"  # JWT or API Key
 TENANT_ID = "vortex"
 COLLECTION_NAME = "pins"
 
-
-
 # The specific search query and pagination configuration
 START_PAGE = 1
-TOTAL_PAGES = 20
+TOTAL_PAGES = 5
 PER_PAGE = 30
-SEARCH_QUERY = "black woman, lady or a girl"
-DEFAULT_CATEGORY = "black woman"
+SEARCH_QUERY = "female model"
+DEFAULT_CATEGORY = "female model"
 PRODUCTION = "production-"
 # File to keep track of successfully uploaded image IDs
 TRACKING_FILE = PRODUCTION + "unsplash-successful-fetched-images.json"
@@ -44,6 +42,65 @@ def save_tracked_id(photo_id):
     tracked.add(photo_id)
     with open(TRACKING_FILE, 'w') as f:
         json.dump(list(tracked), f, indent=2)
+
+# ==========================================
+# INCREMENTAL DATABASE SYNC
+# ==========================================
+def sync_tracker_from_db(tracked_ids):
+    """Fetch already seeded records from ApexKit in bulks of 100 and sync them to the tracker."""
+    print("\n🔄 Syncing tracker with existing records in ApexKit DB...")
+    current_page = 1
+    per_page = 100
+    total_items = None
+    new_ids_found = 0
+    
+    headers = {
+        "x-api-key": f"{APEXKIT_TOKEN}"
+    }
+    record_url = f"{APEXKIT_BASE_URL}/tenant/{TENANT_ID}/api/v1/collections/{COLLECTION_NAME}/records"
+    
+    while True:
+        params = {
+            "page": current_page,
+            "per_page": per_page
+        }
+        try:
+            response = requests.get(record_url, headers=headers, params=params)
+            if response.status_code != 200:
+                print(f"  ⚠️  Unable to sync from DB (Status {response.status_code}). Proceeding with current local tracker.")
+                break
+                
+            res_data = response.json()
+            items = res_data.get("items", [])
+            
+            if total_items is None:
+                total_items = res_data.get("total", 0)
+                print(f"  📊 DB contains {total_items} records.")
+                
+            if not items:
+                break
+                
+            for record in items:
+                metadata = record.get("metadata")
+                if isinstance(metadata, dict):
+                    unsplash_id = metadata.get("id")
+                    if unsplash_id and unsplash_id not in tracked_ids:
+                        tracked_ids.add(unsplash_id)
+                        new_ids_found += 1
+            
+            if current_page * per_page >= total_items:
+                break
+            current_page += 1
+        except Exception as e:
+            print(f"  ⚠️  Sync error: {e}. Proceeding with current local tracker.")
+            break
+            
+    if new_ids_found > 0:
+        print(f"  ✅ Sync complete. Added {new_ids_found} missing IDs to local tracker.")
+        with open(TRACKING_FILE, 'w') as f:
+            json.dump(list(tracked_ids), f, indent=2)
+    else:
+        print("  ✅ Tracker is already fully in sync with the database.")
 
 # ==========================================
 # UNSPLASH API
@@ -88,7 +145,7 @@ def upload_image_to_apexkit(image_url, original_filename):
     print("  ☁️  Uploading to ApexKit...")
     upload_url = f"{APEXKIT_BASE_URL}/tenant/{TENANT_ID}/api/v1/storage/upload"
     headers = {
-        "Authorization": f"Bearer {APEXKIT_TOKEN}"
+        "x-api-key": f"{APEXKIT_TOKEN}"
     }
     files = {
         'file': (original_filename, img_bytes, 'image/jpeg')
@@ -157,7 +214,7 @@ def create_pin_record(filename, photo_data):
 
     record_url = f"{APEXKIT_BASE_URL}/tenant/{TENANT_ID}/api/v1/collections/{COLLECTION_NAME}/records"
     headers = {
-        "Authorization": f"Bearer {APEXKIT_TOKEN}",
+        "x-api-key": f"{APEXKIT_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -176,7 +233,10 @@ def main():
     print(f"🚀 Starting Unsplash seeder for tenant '{TENANT_ID}'")
     
     tracked_ids = load_tracked_ids()
-    print(f"📂 Loaded {len(tracked_ids)} processed image IDs from tracker.")
+    print(f"📂 Loaded {len(tracked_ids)} processed image IDs from local tracker.")
+    
+    # Sync with current database records before querying Unsplash
+    sync_tracker_from_db(tracked_ids)
     
     current_page = START_PAGE
     total_pages = TOTAL_PAGES  # Initialized, will update dynamically after the first page fetch
@@ -192,6 +252,7 @@ def main():
         # Dynamically align the maximum page count with Unsplash's actual search results
         if current_page == START_PAGE:
             print(f"📊 Unsplash reports {retrieved_total_pages} total pages are available for this query.")
+            total_pages = min(retrieved_total_pages, TOTAL_PAGES)
             
         if not photos:
             print("⏹️  No photos retrieved. Exiting loop.")
