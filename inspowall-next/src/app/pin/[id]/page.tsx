@@ -106,14 +106,9 @@ export async function generateMetadata({
   const pin = await getPin(id);
   if (!pin) return { title: 'Pin not found | InspoWall' };
 
-  // Determine user agent and host to serve the most optimized OG metadata
+  // Determine user agent to serve the most optimized OG image size
   const headersList = await headers();
   const userAgent = (headersList.get('user-agent') || '').toLowerCase();
-  
-  // Reconstruct the request origin URL
-  const host = headersList.get('host') || 'inspowall.pages.dev';
-  const protocol = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
-  const origin = `${protocol}://${host}`;
 
   let optimalSize = '1200x630';
   let width = 1200;
@@ -161,8 +156,6 @@ export async function generateMetadata({
     openGraph: {
       title: pin.title,
       description: pin.description,
-      url: `${origin}/pin/${id}`,
-      type: 'Inspowall Pin' as any, // Cast as any to bypass strict Next.js OpenGraph type enums and use custom type
       images: optimizedImageUrl ? [
         {
           url: optimizedImageUrl,
