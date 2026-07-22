@@ -1,6 +1,7 @@
 import { apex, getImageUrl } from '@/lib/apex';
 import { PinDetailClient } from '@/components/PinDetailClient';
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 
 async function getPin(id: string) {
   try {
@@ -44,6 +45,7 @@ async function getPin(id: string) {
       authorHandle,
       authorAvatar,
       image: await getImageUrl(data.image),
+      rawImage: data.image,
       tags: data.tags || [],
       likes_count: data.likes_count || 0,
       category: data.category,
@@ -104,7 +106,54 @@ export async function generateMetadata({
   const pin = await getPin(id);
   if (!pin) return { title: 'Pin not found | InspoWall' };
 
-  const imageUrl = await pin.image;
+  // Determine user agent and host to serve the most optimized OG metadata
+  const headersList = await headers();
+  const userAgent = (headersList.get('user-agent') || '').toLowerCase();
+  
+  // Reconstruct the request origin URL
+  const host = headersList.get('host') || 'inspowall.pages.dev';
+  const protocol = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
+  const origin = `${protocol}://${host}`;
+
+  let optimalSize = '1200x630';
+  let width = 1200;
+  let height = 630;
+
+  if (userAgent.includes('whatsapp')) {
+    optimalSize = '1200x630';
+    width = 1200;
+    height = 630;
+  } else if (userAgent.includes('facebook') || userAgent.includes('fb')) {
+    optimalSize = '1200x630';
+    width = 1200;
+    height = 630;
+  } else if (userAgent.includes('twitter')) {
+    optimalSize = '1200x600';
+    width = 1200;
+    height = 600;
+  } else if (userAgent.includes('telegram')) {
+    optimalSize = '1200x630';
+    width = 1200;
+    height = 630;
+  } else if (userAgent.includes('discord')) {
+    optimalSize = '1200x630';
+    width = 1200;
+    height = 630;
+  } else if (userAgent.includes('reddit')) {
+    optimalSize = '1200x630';
+    width = 1200;
+    height = 630;
+  } else if (userAgent.includes('snapchat')) {
+    optimalSize = '1080x1920';
+    width = 1080;
+    height = 1920;
+  } else if (userAgent.includes('instagram')) {
+    optimalSize = '1080x1080';
+    width = 1080;
+    height = 1080;
+  }
+
+  const optimizedImageUrl = await getImageUrl(pin.rawImage, optimalSize);
 
   return {
     title: `${pin.title} | InspoWall`,
@@ -112,9 +161,23 @@ export async function generateMetadata({
     openGraph: {
       title: pin.title,
       description: pin.description,
-      images: imageUrl ? [imageUrl] : [],
+      url: `${origin}/pin/${id}`,
+      type: 'Inspowall Pin' as any, // Cast as any to bypass strict Next.js OpenGraph type enums and use custom type
+      images: optimizedImageUrl ? [
+        {
+          url: optimizedImageUrl,
+          width,
+          height,
+          alt: pin.title,
+        }
+      ] : [],
     },
-    twitter: { card: 'summary_large_image' },
+    twitter: { 
+      card: 'summary_large_image',
+      title: pin.title,
+      description: pin.description,
+      images: optimizedImageUrl ? [optimizedImageUrl] : [],
+    },
   };
 }
 
