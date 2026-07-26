@@ -106,49 +106,32 @@ export async function generateMetadata({
   const pin = await getPin(id);
   if (!pin) return { title: 'Pin not found | InspoWall' };
 
-  // Determine user agent to serve the most optimized OG image size
+  // Resolve dynamic host for public OpenGraph URL
   const headersList = await headers();
-  const userAgent = (headersList.get('user-agent') || '').toLowerCase();
+  const host = headersList.get('host') || 'inspowall.pages.dev';
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  let ogImageUrl = pin.image; // Fallback to standard image URL
 
-  let optimalSize = '1200x630';
-  let width = 1200;
-  let height = 630;
+  // Generate OpenGraph card using the local InspoWall pin image
+  try {
+    const res = await apex.scripts.run('og-manager', {
+      action: 'store',
+      platform: 'inspowall',
+      imageId: pin.rawImage,
+      title: pin.title,
+      subtitle: pin.description || 'Curated on InspoWall',
+      siteName: 'INSPOWALL',
+      templateId: 'default-opengraph',
+      format: 'webp',
+      quality: 80,
+    });
 
-  if (userAgent.includes('whatsapp')) {
-    optimalSize = '1200x630';
-    width = 1200;
-    height = 630;
-  } else if (userAgent.includes('facebook') || userAgent.includes('fb')) {
-    optimalSize = '1200x630';
-    width = 1200;
-    height = 630;
-  } else if (userAgent.includes('twitter')) {
-    optimalSize = '1200x600';
-    width = 1200;
-    height = 600;
-  } else if (userAgent.includes('telegram')) {
-    optimalSize = '1200x630';
-    width = 1200;
-    height = 630;
-  } else if (userAgent.includes('discord')) {
-    optimalSize = '1200x630';
-    width = 1200;
-    height = 630;
-  } else if (userAgent.includes('reddit')) {
-    optimalSize = '1200x630';
-    width = 1200;
-    height = 630;
-  } else if (userAgent.includes('snapchat')) {
-    optimalSize = '1080x1920';
-    width = 1080;
-    height = 1920;
-  } else if (userAgent.includes('instagram')) {
-    optimalSize = '1080x1080';
-    width = 1080;
-    height = 1080;
+    if (res && res.success && res.hash) {
+      ogImageUrl = `${protocol}://${host}/opengraph/${res.hash}`;
+    }
+  } catch (err) {
+    console.error('Failed to generate OpenGraph edge card for pin:', err);
   }
-
-  const optimizedImageUrl = await getImageUrl(pin.rawImage, optimalSize);
 
   return {
     title: `${pin.title} | InspoWall`,
@@ -156,20 +139,20 @@ export async function generateMetadata({
     openGraph: {
       title: pin.title,
       description: pin.description,
-      images: optimizedImageUrl ? [
+      images: [
         {
-          url: optimizedImageUrl,
-          width,
-          height,
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
           alt: pin.title,
-        }
-      ] : [],
+        },
+      ],
     },
-    twitter: { 
+    twitter: {
       card: 'summary_large_image',
       title: pin.title,
       description: pin.description,
-      images: optimizedImageUrl ? [optimizedImageUrl] : [],
+      images: [ogImageUrl],
     },
   };
 }
