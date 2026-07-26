@@ -6,7 +6,7 @@ import { redirect, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MasonryGrid, MasonryGridSkeleton } from './MasonryGrid';
-import { LogOut, Share2, Copy, CheckCheck, X } from 'lucide-react';
+import { LogOut, Share2, Copy, CheckCheck, X, Sparkles } from 'lucide-react';
 import { apex, getImageUrl } from '@/lib/apex';
 import { EditProfileModal } from './EditProfileModal';
 
@@ -336,15 +336,34 @@ export function ProfileClient() {
         </div>
       </div>
 
+      {/* Developer Tools Banner Card */}
+      <div className="w-full max-w-xl mx-auto mb-10 p-4 rounded-3xl bg-surface border border-black/10 dark:border-white/10 flex items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-2xl bg-neon/10 text-neon border border-neon/20 shrink-0">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-sm text-ink-invert">OpenGraph Studio</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Manage API keys &amp; test edge preview cards</p>
+          </div>
+        </div>
+
+        <Link
+          href="/developer/opengraph"
+          className="bg-neon text-ink font-bold px-5 py-2.5 rounded-full text-xs hover:opacity-90 transition-opacity shrink-0 shadow-[0_0_15px_rgba(204,255,0,0.25)] flex items-center gap-1.5"
+        >
+          <span>Launch Studio</span>
+        </Link>
+      </div>
+
       {/* Tabs */}
       <div className="flex justify-center gap-8 mb-8 border-b border-black/10 dark:border-white/10">
         {(['created', 'saved'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`pb-4 font-medium transition-colors relative capitalize ${
-              activeTab === tab ? 'text-ink-invert' : 'text-gray-500 hover:text-ink-invert'
-            }`}
+            className={`pb-4 font-medium transition-colors relative capitalize ${activeTab === tab ? 'text-ink-invert' : 'text-gray-500 hover:text-ink-invert'
+              }`}
           >
             {tab}
             {activeTab === tab && (
