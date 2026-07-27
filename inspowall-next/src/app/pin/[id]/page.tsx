@@ -99,35 +99,87 @@ async function getSimilarPins(pin: NonNullable<Awaited<ReturnType<typeof getPin>
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }): Promise<Metadata> {
   const { id } = await params;
+  const sp = await searchParams;
   const pin = await getPin(id);
+  
   if (!pin) return { title: 'Pin not found | InspoWall' };
 
-  // Resolve dynamic host for public OpenGraph URL
   const headersList = await headers();
   const host = headersList.get('host') || 'inspowall.pages.dev';
   const protocol = host.includes('localhost') ? 'http' : 'https';
-  let ogImageUrl = pin.image; // Fallback to standard image URL
+  let ogImageUrl = pin.image;
 
-  // Generate OpenGraph card using the local InspoWall pin image
+  const ogApiKey = process.env.NEXT_PUBLIC_OG_API_KEY || process.env.OG_API_KEY || '';
+  
+  const templateId = typeof sp.template_id === 'string' ? sp.template_id : 'default-opengraph';
+  const format = typeof sp.format === 'string' ? sp.format : 'webp';
+  const quality = typeof sp.quality === 'string' ? parseInt(sp.quality, 10) : 80;
+  
+  // Custom transform for the image
+  const blur = typeof sp.blur === 'string' ? parseFloat(sp.blur) : undefined;
+  const imgParams: any = {};
+  if (blur) imgParams.blur = blur;
+
+  // Detect source platform
+  let platform = 'inspowall';
+  let platformId = pin.rawImage;
+  // if (pin.metadata && typeof pin.metadata === 'object' && Object.keys(pin.metadata).length > 0) {
+  //   if (pin.metadata.src?.original?.includes('pexels.com') || pin.metadata.photographer) {
+  //     platform = 'pexels';
+  //     platformId = String(pin.metadata.id || pin.rawImage);
+  //   } else if (pin.metadata.alternative_slugs || pin.metadata.urls?.raw?.includes('unsplash.com')) {
+  //     platform = 'unsplash';
+  //     platformId = String(pin.metadata.id || pin.rawImage);
+  //   }
+  // }
+
+  // Define EXACTLY what goes into your Tera Template
+  const dynamicDataPayload = [
+    { 
+      type: 'image', 
+      target: 'IMAGE_URL', 
+      value: platformId, 
+      platform, 
+      params: imgParams 
+    },
+    { type: 'text', target: 'TITLE', value: pin.title },
+    { type: 'text', target: 'SUBTITLE', value: pin.description || 'Curated on InspoWall' },
+    { type: 'text', target: 'SITE_NAME', value: host.toUpperCase() },
+    { type: 'text', target: 'PHOTOGRAPHER', value: pin.author || 'Community Artist' },
+    { type: 'text', target: "PLATFORM", value: platform.toUpperCase() }
+  ];
+
   try {
-    const res = await apex.scripts.run('og-manager', {
-      action: 'store',
-      platform: 'inspowall',
-      imageId: pin.rawImage,
-      title: pin.title,
-      subtitle: pin.description || 'Curated on InspoWall',
-      siteName: 'INSPOWALL',
-      templateId: 'default-opengraph',
-      format: 'webp',
-      quality: 80,
+    const targetUrl = `${apex.baseUrl.replace(/\/$/, '')}/api/v1/run/og-manager`;
+    
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-og-api-key': ogApiKey,
+      },
+      body: JSON.stringify({
+        action: 'store',
+        templateId,
+        format,
+        quality,
+        data: dynamicDataPayload, // <--- Passing Dynamic Array!
+      }),
     });
 
+    const res = await response.json();
+
     if (res && res.success && res.hash) {
-      ogImageUrl = `${protocol}://${host}/opengraph/${res.hash}`;
+      const extraParams = new URLSearchParams();
+      if (blur) extraParams.append('blur', String(blur));
+      const queryStr = extraParams.toString();
+      ogImageUrl = `${protocol}://${host}/opengraph/${res.hash}${queryStr ? `?${queryStr}` : ''}`;
     }
   } catch (err) {
     console.error('Failed to generate OpenGraph edge card for pin:', err);

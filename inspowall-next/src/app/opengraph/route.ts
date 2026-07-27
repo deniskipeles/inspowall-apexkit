@@ -3,19 +3,14 @@ import { apex } from '@/lib/apex';
 
 export async function POST(req: NextRequest) {
   try {
-    // Read key from dedicated header 'x-og-api-key' (or fallback to 'x-api-key')
     const ogApiKey = req.headers.get('x-og-api-key') || req.headers.get('x-api-key') || '';
     if (!ogApiKey) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Missing required x-og-api-key header' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized', message: 'Missing x-og-api-key header' }, { status: 401 });
     }
 
     const body = await req.json();
     const targetUrl = `${apex.baseUrl.replace(/\/$/, '')}/api/v1/run/og-manager`;
 
-    // Forward with dedicated x-og-api-key header
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
@@ -24,7 +19,10 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         action: 'store',
-        ...body,
+        templateId: body.templateId || 'default-opengraph',
+        format: body.format || 'webp',
+        quality: body.quality || 80,
+        data: body.data, // <--- Passing the dynamic array!
       }),
     });
 
@@ -33,18 +31,15 @@ export async function POST(req: NextRequest) {
 
     try {
       data = JSON.parse(responseText);
-    } catch {
+    } catch (err) {
       return NextResponse.json(
-        { error: 'Backend Response Error', message: `HTTP ${response.status} returned non-JSON.` },
-        { status: response.status || 502 }
+        { error: 'Backend Response Error', message: `Non-JSON response: ${responseText.substring(0, 200)}` },
+        { status: 502 }
       );
     }
 
     if (!response.ok || !data.success) {
-      return NextResponse.json(
-        { error: data.error || 'Failed to create OpenGraph card' },
-        { status: response.status || 400 }
-      );
+      return NextResponse.json({ error: data.error || 'Failed to create OpenGraph image' }, { status: 400 });
     }
 
     const origin = req.headers.get('host')?.includes('localhost')
