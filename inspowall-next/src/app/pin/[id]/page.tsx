@@ -23,8 +23,8 @@ async function getPin(id: string) {
       const source = metadata.src?.original?.includes('pexels.com') || metadata.photographer
         ? 'pexels'
         : metadata.alternative_slugs || metadata.urls?.raw?.includes('unsplash.com')
-        ? 'unsplash'
-        : null;
+          ? 'unsplash'
+          : null;
 
       if (source === 'pexels' && metadata.photographer) {
         author = metadata.photographer;
@@ -50,7 +50,7 @@ async function getPin(id: string) {
       likes_count: data.likes_count || 0,
       category: data.category,
       metadata,
-      logo:apex.baseUrl
+      logo: apex.baseUrl
     };
   } catch {
     return null;
@@ -107,7 +107,7 @@ export async function generateMetadata({
   const { id } = await params;
   const sp = await searchParams;
   const pin = await getPin(id);
-  
+
   if (!pin) return { title: 'Pin not found | InspoWall' };
 
   const headersList = await headers();
@@ -116,17 +116,25 @@ export async function generateMetadata({
   let ogImageUrl = pin.image;
 
   const ogApiKey = process.env.NEXT_PUBLIC_OG_API_KEY || process.env.OG_API_KEY || '';
-  
+
   const templateId = typeof sp.template_id === 'string' ? sp.template_id : 'default-opengraph';
-  const format = typeof sp.format === 'string' ? sp.format : 'webp';
-  const quality = typeof sp.quality === 'string' ? parseInt(sp.quality, 10) : 80;
-  
-  // Custom transform for the image
+
+  // 🔴 CRITICAL FIX FOR WHATSAPP: Force JPEG if using the whatsapp square template
+  let format = typeof sp.format === 'string' ? sp.format : 'webp';
+  if (templateId === 'og-whatsapp-channel' && typeof sp.format !== 'string') {
+    format = 'jpeg'; // WebP often breaks WhatsApp layout/parsing
+  }
+
+  // Lower quality slightly for WhatsApp to stay under their strict 300KB limit
+  let quality = typeof sp.quality === 'string' ? parseInt(sp.quality, 10) : 80;
+  if (templateId === 'og-whatsapp-channel' && typeof sp.quality !== 'string') {
+    quality = 75;
+  }
+
   const blur = typeof sp.blur === 'string' ? parseFloat(sp.blur) : undefined;
   const imgParams: any = {};
   if (blur) imgParams.blur = blur;
 
-  // Detect source platform
   let platform = 'inspowall';
   let platformId = pin.rawImage;
   if (pin.metadata && typeof pin.metadata === 'object' && Object.keys(pin.metadata).length > 0) {
@@ -139,26 +147,18 @@ export async function generateMetadata({
     }
   }
 
-  // Define EXACTLY what goes into your Tera Template
   const dynamicDataPayload = [
-    { 
-      type: 'image', 
-      target: 'IMAGE_URL', 
-      value: platformId, 
-      platform, 
-      params: imgParams 
-    },
+    { type: 'image', target: 'IMAGE_URL', value: platformId, platform, params: imgParams },
     { type: 'text', target: 'TITLE', value: pin.title },
     { type: 'text', target: 'SUBTITLE', value: pin.description || 'Curated on InspoWall' },
     { type: 'text', target: 'SITE_NAME', value: host.toUpperCase() },
     { type: 'text', target: 'PHOTOGRAPHER', value: pin.author || 'Community Artist' },
-    { type: 'text', target: 'PLATFORM', value: platform.toUpperCase() }
+    { type: 'text', target: "PLATFORM", value: platform.toUpperCase() }
   ];
 
   try {
-    // 1. Target our optimized Next.js frontend route instead of the backend directly
     const targetUrl = `${protocol}://${host}/opengraph`;
-    
+
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
@@ -175,13 +175,18 @@ export async function generateMetadata({
 
     const res = await response.json();
 
-    // 2. The Next.js endpoint returns the fully constructed edge-cache URL
     if (res && res.success && res.url) {
       ogImageUrl = res.url;
     }
   } catch (err) {
     console.error('Failed to generate OpenGraph edge card for pin:', err);
   }
+
+  // 🔴 DYNAMIC DIMENSIONS BASED ON TEMPLATE
+  const isSquare = templateId === 'og-whatsapp-channel';
+  const imgWidth = isSquare ? 1200 : 1200;
+  const imgHeight = isSquare ? 1200 : 630;
+  const mimeType = format === 'jpeg' || format === 'jpg' ? 'image/jpeg' : format === 'png' ? 'image/png' : 'image/webp';
 
   return {
     title: `${pin.title} | InspoWall`,
@@ -192,11 +197,13 @@ export async function generateMetadata({
       images: [
         {
           url: ogImageUrl,
-          width: 1200,
-          height: 630,
+          width: imgWidth,
+          height: imgHeight,
           alt: pin.title,
+          type: mimeType, // 🔴 Explicitly tell WhatsApp what format this is
         },
       ],
+      siteName: "InspoWall Page"
     },
     twitter: {
       card: 'summary_large_image',
