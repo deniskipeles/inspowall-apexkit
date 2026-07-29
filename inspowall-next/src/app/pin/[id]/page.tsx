@@ -129,15 +129,15 @@ export async function generateMetadata({
   // Detect source platform
   let platform = 'inspowall';
   let platformId = pin.rawImage;
-  // if (pin.metadata && typeof pin.metadata === 'object' && Object.keys(pin.metadata).length > 0) {
-  //   if (pin.metadata.src?.original?.includes('pexels.com') || pin.metadata.photographer) {
-  //     platform = 'pexels';
-  //     platformId = String(pin.metadata.id || pin.rawImage);
-  //   } else if (pin.metadata.alternative_slugs || pin.metadata.urls?.raw?.includes('unsplash.com')) {
-  //     platform = 'unsplash';
-  //     platformId = String(pin.metadata.id || pin.rawImage);
-  //   }
-  // }
+  if (pin.metadata && typeof pin.metadata === 'object' && Object.keys(pin.metadata).length > 0) {
+    if (pin.metadata.src?.original?.includes('pexels.com') || pin.metadata.photographer) {
+      platform = 'pexels';
+      platformId = String(pin.metadata.id || pin.rawImage);
+    } else if (pin.metadata.alternative_slugs || pin.metadata.urls?.raw?.includes('unsplash.com')) {
+      platform = 'unsplash';
+      platformId = String(pin.metadata.id || pin.rawImage);
+    }
+  }
 
   // Define EXACTLY what goes into your Tera Template
   const dynamicDataPayload = [
