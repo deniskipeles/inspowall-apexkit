@@ -152,11 +152,12 @@ export async function generateMetadata({
     { type: 'text', target: 'SUBTITLE', value: pin.description || 'Curated on InspoWall' },
     { type: 'text', target: 'SITE_NAME', value: host.toUpperCase() },
     { type: 'text', target: 'PHOTOGRAPHER', value: pin.author || 'Community Artist' },
-    { type: 'text', target: "PLATFORM", value: platform.toUpperCase() }
+    { type: 'text', target: 'PLATFORM', value: platform.toUpperCase() }
   ];
 
   try {
-    const targetUrl = `${apex.baseUrl.replace(/\/$/, '')}/api/v1/run/og-manager`;
+    // 1. Target our optimized Next.js frontend route instead of the backend directly
+    const targetUrl = `${protocol}://${host}/opengraph`;
     
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -165,21 +166,18 @@ export async function generateMetadata({
         'x-og-api-key': ogApiKey,
       },
       body: JSON.stringify({
-        action: 'store',
         templateId,
         format,
         quality,
-        data: dynamicDataPayload, // <--- Passing Dynamic Array!
+        data: dynamicDataPayload,
       }),
     });
 
     const res = await response.json();
 
-    if (res && res.success && res.hash) {
-      const extraParams = new URLSearchParams();
-      if (blur) extraParams.append('blur', String(blur));
-      const queryStr = extraParams.toString();
-      ogImageUrl = `${protocol}://${host}/opengraph/${res.hash}${queryStr ? `?${queryStr}` : ''}`;
+    // 2. The Next.js endpoint returns the fully constructed edge-cache URL
+    if (res && res.success && res.url) {
+      ogImageUrl = res.url;
     }
   } catch (err) {
     console.error('Failed to generate OpenGraph edge card for pin:', err);

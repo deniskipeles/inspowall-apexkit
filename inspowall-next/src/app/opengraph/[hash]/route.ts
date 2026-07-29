@@ -3,14 +3,11 @@ import { apex } from '@/lib/apex';
 
 function getMimeType(format?: string): string {
   switch (format?.toLowerCase()) {
-    case 'webp':
-      return 'image/webp';
+    case 'webp': return 'image/webp';
     case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
+    case 'jpeg': return 'image/jpeg';
     case 'png':
-    default:
-      return 'image/png';
+    default: return 'image/png';
   }
 }
 
@@ -22,27 +19,39 @@ export async function GET(
 
   try {
     // 1. Resolve hash mapping via og-manager script
-    const res = await apex.scripts.run('og-manager', {
-      action: 'resolve',
-      hash,
+    // Add 'force-cache' so Next.js caches this JSON response permanently
+    const resolveRes = await fetch(`${apex.baseUrl.replace(/\/$/, '')}/api/v1/run/og-manager`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resolve', hash }),
+      cache: 'force-cache', 
     });
 
+    const res = await resolveRes.json();
+
     if (!res || !res.success || !res.renderUrl) {
-      return new NextResponse('OpenGraph Image Not Found', { status: 404 });
+      return new NextResponse(
+        JSON.stringify({ error: res?.error || 'OpenGraph Image Not Found' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     // 2. Fetch rendered binary image buffer from ApexKit
-    const imageRes = await fetch(res.renderUrl);
+    // Add 'force-cache' so the rendered PNG/WebP bytes are cached in Next.js memory
+    const imageRes = await fetch(res.renderUrl, { cache: 'force-cache' });
+    
     if (!imageRes.ok) {
-      return new NextResponse('Failed to render OpenGraph image', { status: 502 });
+      const errText = await imageRes.text();
+      return new NextResponse(
+        JSON.stringify({ error: 'Failed to render OpenGraph image', details: errText.substring(0, 300) }),
+        { status: 502, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     const imageBuffer = await imageRes.arrayBuffer();
-
-    // 3. Determine MIME type (image/webp, image/jpeg, image/png)
     const contentType = getMimeType(res.format);
 
-    // 4. Return image with long-term Cloudflare edge caching headers
+    // 3. Return image with Cloudflare edge caching headers
     return new NextResponse(imageBuffer, {
       status: 200,
       headers: {
@@ -51,7 +60,10 @@ export async function GET(
         'Cloudflare-CDN-Cache-Control': 'max-age=31536000',
       },
     });
-  } catch (err) {
-    return new NextResponse('Internal Server Error', { status: 500 });
+  } catch (err: any) {
+    return new NextResponse(
+      JSON.stringify({ error: 'Internal Server Error', message: err.message || String(err) }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
