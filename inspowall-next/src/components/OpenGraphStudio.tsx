@@ -65,6 +65,29 @@ export function OpenGraphStudio() {
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Custom Templates State
+  const [customTemplates, setCustomTemplates] = useState<any[]>([]);
+  const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateFile, setNewTemplateFile] = useState<File | null>(null);
+
+  const loadCustomTemplates = useCallback(async () => {
+    try {
+      const res = await fetch(`${apex.baseUrl}/api/v1/webhook/og-template-manager`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apex.getToken()}`,
+        },
+      });
+      const data = await res.json();
+      if (data.success && data.templates) {
+        setCustomTemplates(data.templates);
+      }
+    } catch (err) {
+      console.error("Failed to load custom templates:", err);
+    }
+  }, []);
+
   // 1. Fetch API Keys & Templates
   const loadInitialData = useCallback(async () => {
     if (!user) return;
@@ -74,6 +97,7 @@ export function OpenGraphStudio() {
         apex.collection('og_api_keys').list({ per_page: 50 }),
         apex.templates.list().catch(() => []),
       ]);
+      await loadCustomTemplates();
 
       const keys = keysRes.items || [];
       setApiKeys(keys);
@@ -187,6 +211,43 @@ export function OpenGraphStudio() {
     }
   };
 
+  const handleUploadTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTemplateFile || !newTemplateName.trim()) return;
+
+    setIsUploadingTemplate(true);
+    try {
+      // Read file as text
+      const svgContent = await newTemplateFile.text();
+
+      const res = await fetch(`${apex.baseUrl}/tenant/vortex/api/v1/webhook/og-template-manager`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apex.getToken()}`,
+        },
+        body: JSON.stringify({
+          slug: newTemplateName.toLowerCase().replace(/\s+/g, '-'),
+          name: newTemplateName,
+          svg: svgContent
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Upload failed');
+
+      // toast('Template uploaded successfully!', 'success');
+      setNewTemplateName('');
+      setNewTemplateFile(null);
+      await loadCustomTemplates(); // Refresh list
+      setTemplateId(data.templateId); // Auto-select new template
+    } catch (err: any) {
+      // toast(err.message, 'error');
+    } finally {
+      setIsUploadingTemplate(false);
+    }
+  };
+
   // UI Helpers
   const handleAddVar = () => setCustomVars([...customVars, { target: 'NEW_VAR', value: '' }]);
   const handleRemoveVar = (index: number) => setCustomVars(customVars.filter((_, i) => i !== index));
@@ -291,6 +352,53 @@ export function OpenGraphStudio() {
               </div>
             ) : (
               <div className="text-center py-6 text-gray-500 text-sm border border-dashed rounded-2xl">No API keys created yet.</div>
+            )}
+          </div>
+
+          {/* Custom Template Upload Section */}
+          <div className="bg-surface border border-black/10 dark:border-white/10 rounded-3xl p-6 shadow-xl space-y-5">
+            <h2 className="text-lg font-display font-bold flex items-center gap-2 text-ink-invert">
+              <Layers className="text-neon" size={18} /> My Templates
+            </h2>
+            
+            <form onSubmit={handleUploadTemplate} className="space-y-3">
+              <input
+                type="text"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                placeholder="Template Name (e.g. Summer Promo)"
+                className="w-full bg-black/5 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl px-3.5 py-2 text-sm text-ink-invert focus:outline-none focus:border-neon/50"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept=".svg"
+                  onChange={(e) => setNewTemplateFile(e.target.files?.[0] || null)}
+                  className="flex-1 text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-neon/10 file:text-neon hover:file:bg-neon/20"
+                />
+                <button
+                  type="submit"
+                  disabled={isUploadingTemplate || !newTemplateFile || !newTemplateName}
+                  className="bg-neon text-ink font-bold px-4 py-2 rounded-xl text-sm hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                >
+                  {isUploadingTemplate ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  Upload
+                </button>
+              </div>
+            </form>
+
+            {/* Merge custom templates into your <select> dropdown in the Payload config */}
+            {customTemplates.length > 0 && (
+              <div className="mt-4 border-t border-black/10 dark:border-white/10 pt-4">
+                <p className="text-xs text-gray-400 mb-2 font-bold uppercase">Uploaded Templates</p>
+                <div className="flex flex-wrap gap-2">
+                  {customTemplates.map(t => (
+                    <span key={t.slug} className="text-xs bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-2 py-1 rounded-md text-ink-invert cursor-pointer hover:border-neon" onClick={() => setTemplateId(t.slug)}>
+                      {t.name || t.slug}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
