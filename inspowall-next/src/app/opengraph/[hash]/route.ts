@@ -12,14 +12,20 @@ function getMimeType(format?: string): string {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ hash: string }> }
 ) {
   const { hash } = await params;
+  const etag = `"${hash}"`;
+
+  // 1. BROWSER DISK CACHE CHECK (Instant 304 Not Modified)
+  // If the browser sends If-None-Match, it means it has the file on disk.
+  // Since our hash is deterministic, it NEVER changes. We can instantly tell the browser to use its cache.
+  if (req.headers.get('if-none-match') === etag) {
+    return new NextResponse(null, { status: 304 });
+  }
 
   try {
-    // 1. Resolve hash mapping via og-manager script
-    // Add 'force-cache' so Next.js caches this JSON response permanently
     const resolveRes = await fetch(`${apex.baseUrl.replace(/\/$/, '')}/api/v1/run/og-manager`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -36,8 +42,6 @@ export async function GET(
       );
     }
 
-    // 2. Fetch rendered binary image buffer from ApexKit
-    // Add 'force-cache' so the rendered PNG/WebP bytes are cached in Next.js memory
     const imageRes = await fetch(res.renderUrl, { cache: 'force-cache' });
     
     if (!imageRes.ok) {
@@ -51,13 +55,16 @@ export async function GET(
     const imageBuffer = await imageRes.arrayBuffer();
     const contentType = getMimeType(res.format);
 
-    // 3. Return image with Cloudflare edge caching headers
+    // 2. Return Image with ETag and fixed Vary headers
     return new NextResponse(imageBuffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable',
+        'Cache-Control': 'public, max-age=31536000, immutable',
         'Cloudflare-CDN-Cache-Control': 'max-age=31536000',
+        'ETag': etag,
+        // Overwrite Next.js React Server Component tracking to fix browser disk caching
+        'Vary': 'Accept-Encoding', 
       },
     });
   } catch (err: any) {
