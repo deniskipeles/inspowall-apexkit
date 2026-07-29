@@ -220,7 +220,7 @@ export function OpenGraphStudio() {
       // Read file as text
       const svgContent = await newTemplateFile.text();
 
-      const res = await fetch(`${apex.baseUrl}/tenant/vortex/api/v1/webhook/og-template-manager`, {
+      const res = await fetch(`${apex.baseUrl}/api/v1/webhook/og-template-manager`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
