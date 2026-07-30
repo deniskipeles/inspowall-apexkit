@@ -15,7 +15,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ hash: string }> }
 ) {
-  const { hash } = await params;
+  const { hash: rawHash } = await params;
+  
+  // 🔴 CRITICAL FIX: Strip the dummy extension we added for legacy mode renderers
+  const hash = rawHash.replace(/\.(jpg|jpeg|png|webp)$/i, '');
   const etag = `"${hash}"`;
 
   // 1. BROWSER DISK CACHE CHECK (Instant 304 Not Modified)

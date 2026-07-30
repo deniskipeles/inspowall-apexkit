@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       hash: data.hash,
-      url: `${origin}/opengraph/${data.hash}`,
+      url: `${origin}/opengraph/${data.hash}.${body.format || 'webp'}`,
     });
   } catch (err: any) {
     return NextResponse.json({ error: 'Internal Error', message: err.message }, { status: 500 });
