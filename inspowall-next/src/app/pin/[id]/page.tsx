@@ -180,7 +180,7 @@ export async function generateMetadata({
 
   const isSquare = templateId === 'og-whatsapp-channel';
   const imgWidth = isOgEnabled ? (isSquare ? 1200 : 1200) : (pin.metadata?.width || 1200);
-  const imgHeight = isOgEnabled ? (isSquare ? 1200 : 630) : (pin.metadata?.height || Math.round(pin.height || 630));
+  const imgHeight = isOgEnabled ? (isSquare ? 1200 : 630) : (pin.metadata?.height || 630);
   const mimeType = isOgEnabled
     ? (format === 'jpeg' || format === 'jpg' ? 'image/jpeg' : format === 'png' ? 'image/png' : 'image/webp')
     : (pin.image.endsWith('.png') ? 'image/png' : pin.image.endsWith('.jpg') || pin.image.endsWith('.jpeg') ? 'image/jpeg' : 'image/webp');
