@@ -50,7 +50,7 @@ async function getPin(id: string) {
       likes_count: data.likes_count || 0,
       category: data.category,
       metadata,
-      logo: apex.baseUrl
+      logo: apex.baseUrl,
     };
   } catch {
     return null;
@@ -75,7 +75,6 @@ async function getSimilarPins(pin: NonNullable<Awaited<ReturnType<typeof getPin>
       results = res.items || res;
     }
 
-    // Wrap the mapped array in Promise.all so all image URLs resolve before returning
     return Promise.all(
       (results || [])
         .filter((r: any) => r && r.id !== pin.id)
@@ -113,26 +112,26 @@ export async function generateMetadata({
   const headersList = await headers();
   const host = headersList.get('host') || 'inspowall.pages.dev';
   const protocol = host.includes('localhost') ? 'http' : 'https';
+
+  // Check ?og=0 or ?og=1 query param (defaults to 1 / enabled)
+  const ogParam = typeof sp.og === 'string' ? sp.og.trim() : Array.isArray(sp.og) ? sp.og[0] : '1';
+  const isOgEnabled = ogParam !== '0' && ogParam.toLowerCase() !== 'false';
+
   let ogImageUrl = pin.image;
-
-  const ogApiKey = process.env.NEXT_PUBLIC_OG_API_KEY || process.env.OG_API_KEY || '';
-
   const templateId = typeof sp.template_id === 'string' ? sp.template_id : 'default-opengraph';
 
-  // 🔴 CRITICAL FIX FOR WHATSAPP: Force JPEG if using the whatsapp square template
   let format = typeof sp.format === 'string' ? sp.format : 'webp';
   if (templateId === 'og-whatsapp-channel' && typeof sp.format !== 'string') {
-    format = 'jpeg'; // WebP often breaks WhatsApp layout/parsing
+    format = 'jpeg';
   }
 
-  // Lower quality slightly for WhatsApp to stay under their strict 300KB limit
   let quality = typeof sp.quality === 'string' ? parseInt(sp.quality, 10) : 80;
   if (templateId === 'og-whatsapp-channel' && typeof sp.quality !== 'string') {
     quality = 75;
   }
 
   const blur = typeof sp.blur === 'string' ? parseFloat(sp.blur) : undefined;
-  const imgParams: any = {};
+  const imgParams: Record<string, any> = {};
   if (blur) imgParams.blur = blur;
 
   let platform = 'inspowall';
@@ -147,46 +146,44 @@ export async function generateMetadata({
     }
   }
 
-  const dynamicDataPayload = [
-    { type: 'image', target: 'IMAGE_URL', value: platformId, platform, params: imgParams },
-    { type: 'text', target: 'TITLE', value: pin.title },
-    { type: 'text', target: 'SUBTITLE', value: pin.description || 'Curated on InspoWall' },
-    { type: 'text', target: 'SITE_NAME', value: host.toUpperCase() },
-    { type: 'text', target: 'PHOTOGRAPHER', value: pin.author || 'Community Artist' },
-    { type: 'text', target: "PLATFORM", value: platform.toUpperCase() }
-  ];
+  // Only generate and store the dynamic OG card if og !== 0
+  if (isOgEnabled) {
+    const dynamicDataPayload = [
+      { type: 'image', target: 'IMAGE_URL', value: platformId, platform, params: imgParams },
+      { type: 'text', target: 'TITLE', value: pin.title },
+      { type: 'text', target: 'SUBTITLE', value: pin.description || 'Curated on InspoWall' },
+      { type: 'text', target: 'SITE_NAME', value: host.toUpperCase() },
+      { type: 'text', target: 'PHOTOGRAPHER', value: pin.author || 'Community Artist' },
+      { type: 'text', target: 'PLATFORM', value: platform.toUpperCase() },
+    ];
 
-  try {
-    const targetUrl = `${protocol}://${host}/opengraph`;
+    try {
+      const ogApiKey = process.env.NEXT_PUBLIC_OG_API_KEY || process.env.OG_API_KEY || '';
+      apex.setHeader('x-og-api-key', ogApiKey);
 
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-og-api-key': ogApiKey,
-      },
-      body: JSON.stringify({
+      const res = await apex.webhook('og').post('store', {
         templateId,
         format,
         quality,
         data: dynamicDataPayload,
-      }),
-    });
+      });
 
-    const res = await response.json();
-
-    if (res && res.success && res.url) {
-      ogImageUrl = res.url;
+      if (res && res.success && res.hash) {
+        ogImageUrl = `${protocol}://${host}/opengraph/${res.hash}.${format}`;
+      }
+    } catch (err) {
+      console.error('Failed to generate OpenGraph edge card for pin:', err);
+    } finally {
+      apex.removeHeader('x-og-api-key');
     }
-  } catch (err) {
-    console.error('Failed to generate OpenGraph edge card for pin:', err);
   }
 
-  // 🔴 DYNAMIC DIMENSIONS BASED ON TEMPLATE
   const isSquare = templateId === 'og-whatsapp-channel';
-  const imgWidth = isSquare ? 1200 : 1200;
-  const imgHeight = isSquare ? 1200 : 630;
-  const mimeType = format === 'jpeg' || format === 'jpg' ? 'image/jpeg' : format === 'png' ? 'image/png' : 'image/webp';
+  const imgWidth = isOgEnabled ? (isSquare ? 1200 : 1200) : (pin.metadata?.width || 1200);
+  const imgHeight = isOgEnabled ? (isSquare ? 1200 : 630) : (pin.metadata?.height || Math.round(pin.height || 630));
+  const mimeType = isOgEnabled
+    ? (format === 'jpeg' || format === 'jpg' ? 'image/jpeg' : format === 'png' ? 'image/png' : 'image/webp')
+    : (pin.image.endsWith('.png') ? 'image/png' : pin.image.endsWith('.jpg') || pin.image.endsWith('.jpeg') ? 'image/jpeg' : 'image/webp');
 
   return {
     title: `${pin.title} | InspoWall`,
@@ -200,13 +197,13 @@ export async function generateMetadata({
           width: imgWidth,
           height: imgHeight,
           alt: pin.title,
-          type: mimeType, // 🔴 Explicitly tell WhatsApp what format this is
+          type: mimeType,
         },
       ],
-      siteName: "InspoWall Page"
+      siteName: 'InspoWall',
     },
     twitter: {
-      card: 'summary_large_image',
+      card: isOgEnabled ? 'summary_large_image' : 'summary',
       title: pin.title,
       description: pin.description,
       images: [ogImageUrl],

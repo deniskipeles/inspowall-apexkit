@@ -73,7 +73,7 @@ export function OpenGraphStudio() {
 
   const loadCustomTemplates = useCallback(async () => {
     try {
-      const res = await fetch(`${apex.baseUrl}/api/v1/webhook/og-template-manager`, {
+      const res = await fetch(`${apex.baseUrl}/webhook/og/templates`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apex.getToken()}`,
@@ -109,7 +109,7 @@ export function OpenGraphStudio() {
     } finally {
       setIsLoadingKeys(false);
     }
-  }, [user, selectedKey]);
+  }, [user, selectedKey, loadCustomTemplates]);
 
   useEffect(() => {
     loadInitialData();
@@ -220,7 +220,7 @@ export function OpenGraphStudio() {
       // Read file as text
       const svgContent = await newTemplateFile.text();
 
-      const res = await fetch(`${apex.baseUrl}/api/v1/webhook/og-template-manager`, {
+      const res = await fetch(`${apex.baseUrl}/webhook/og/templates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

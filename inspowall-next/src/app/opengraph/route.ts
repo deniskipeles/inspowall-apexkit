@@ -9,42 +9,21 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const targetUrl = `${apex.baseUrl.replace(/\/$/, '')}/api/v1/run/og-manager`;
 
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-og-api-key': ogApiKey,
-      },
-      body: JSON.stringify({
-        action: 'store',
-        templateId: body.templateId || 'default-opengraph',
-        format: body.format || 'webp',
-        quality: body.quality || 80,
-        data: body.data, // <--- Passing the dynamic array!
-      }),
+    // Set the Custom Header securely using the SDK
+    apex.setHeader('x-og-api-key', ogApiKey);
+
+    // Call the webhook natively using the SDK.
+    // The SDK automatically resolves the correct endpoint: /api/v1/webhook/og/store
+    const data = await apex.webhook('og').post('store', {
+      templateId: body.templateId || 'default-opengraph',
+      format: body.format || 'webp',
+      quality: body.quality || 80,
+      data: body.data,
     });
 
-    const responseText = await response.text();
-    let data: any;
-
-    try {
-      data = JSON.parse(responseText);
-    } catch (err) {
-      return NextResponse.json(
-        { error: 'Backend Response Error', message: `Non-JSON response: ${responseText.substring(0, 200)}` },
-        { status: 502 }
-      );
-    }
-
-    if (!response.ok || !data.success) {
-      return NextResponse.json({ error: data.error || 'Failed to create OpenGraph image' }, { status: 400 });
-    }
-
-    const origin = req.headers.get('host')?.includes('localhost')
-      ? `http://${req.headers.get('host')}`
-      : 'https://inspowall.pages.dev';
+    // Use the actual request origin instead of hardcoding inspowall.pages.dev
+    const origin = req.nextUrl.origin;
 
     return NextResponse.json({
       success: true,
@@ -52,6 +31,12 @@ export async function POST(req: NextRequest) {
       url: `${origin}/opengraph/${data.hash}.${body.format || 'webp'}`,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Internal Error', message: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal Error', message: err.message || err.details || String(err) }, 
+      { status: err.status || 500 }
+    );
+  } finally {
+    // Clean up the header so it doesn't leak into other requests
+    apex.removeHeader('x-og-api-key');
   }
 }
