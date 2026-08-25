@@ -7,14 +7,13 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const subpath = path.join('/');
+  const subpath = path ? path.join('/') : '';
   const search = req.nextUrl.search;
   const targetUrl = `${API_URL.replace(/\/$/, '')}/${subpath}${search}`;
 
   try {
     const res = await fetch(targetUrl, {
       headers: {
-        // Forward origin request headers if needed
         Accept: req.headers.get('accept') || '*/*',
       },
     });
@@ -22,10 +21,11 @@ export async function GET(
     const buffer = await res.arrayBuffer();
     const contentType = res.headers.get('content-type') || 'application/octet-stream';
     const isImage = contentType.startsWith('image/');
-    
-    // AUTOMATIC 2KB FILTER:
-    // If response is smaller than 2KB, not OK, or not an image -> DO NOT CACHE
-    const isCacheable = res.ok && isImage && buffer.byteLength >= 2048;
+    const byteLength = buffer.byteLength;
+
+    // AUTOMATIC 2KB CACHE FILTER
+    // Only cache if response is 200 OK, is an image, and >= 2KB
+    const isCacheable = res.ok && isImage && byteLength >= 2048;
 
     const headers = new Headers();
     headers.set('Content-Type', contentType);
@@ -36,7 +36,6 @@ export async function GET(
       headers.set('Cloudflare-CDN-Cache-Control', 'max-age=31536000');
       headers.set('CDN-Cache-Control', 'max-age=31536000');
     } else {
-      // Force edge and browser to re-fetch on every subsequent attempt
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
       headers.set('Cloudflare-CDN-Cache-Control', 'no-store');
       headers.set('CDN-Cache-Control', 'no-store');
@@ -50,7 +49,11 @@ export async function GET(
     });
   } catch (err: any) {
     return new NextResponse(
-      JSON.stringify({ error: 'Proxy Fetch Error', message: err.message }),
+      JSON.stringify({ 
+        error: 'Proxy Fetch Error', 
+        targetUrl, 
+        message: err.message 
+      }),
       {
         status: 502,
         headers: {
