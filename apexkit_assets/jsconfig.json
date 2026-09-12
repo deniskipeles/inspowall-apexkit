@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "ignoreDeprecations": "6.0",
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@/custom/*": [
+        "./modules/custom/*"
+      ],
+      "@/esm/*": [
+        "./modules/esm/*"
+      ]
+    },
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "**/*.js",
+    "**/*.ts",
+    "**/*.html",
+    "apexkit.d.ts"
+  ]
+}

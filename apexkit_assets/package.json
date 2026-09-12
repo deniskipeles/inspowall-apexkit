@@ -1,0 +1,8 @@
+{
+  "name": "apexkit-workspace",
+  "type": "module",
+  "scope": "root",
+  "devDependencies": {
+    "@apexkit/cli": "^1.0.2"
+  }
+}
